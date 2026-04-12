@@ -1,0 +1,352 @@
+###############################################################################
+# docker-compose.yml — xCloudVLMui Platform 完整服務堆疊
+#
+# 硬體：Advantech AIR-030 (Jetson AGX Orin 64GB, JetPack 6.0)
+# 模型：Gemma 4 E4B GGUF Q4_K_M  (~4GB VRAM, 128K context)
+#
+# 快速啟動：make up
+# 首次啟動：make setup && make up
+#
+# 服務清單（共 8 個）：
+#   [1] model-init   — 自動下載 GGUF 模型（一次性任務）
+#   [2] mosquitto    — Eclipse Mosquitto MQTT Broker (Port 1883/9001)
+#   [3] llama-cpp    — Gemma 4 E4B 推論引擎 (Port 8080)
+#   [4] vlm-webui    — 即時視覺分析 WebUI (Port 8090, WebRTC)
+#   [5] backend      — FastAPI 中介層 (Port 8000) + /metrics Prometheus
+#   [6] frontend     — Next.js 儀表板 (Port 3000)
+#   [7] nginx        — 反向代理 (Port 80)
+#   [8] cadvisor     — 容器資源監控 Web UI (Port 8091)  ← 3.3 可觀測性
+###############################################################################
+
+name: xcloudvlmui-platform
+
+version: "3.9"
+
+# ── 共用環境變數 ─────────────────────────────────────────────────────
+x-llm-env: &llm-env
+  LLM_BASE_URL:    http://llama-cpp:8080
+  LLM_MODEL:       gemma-4-e4b-it
+  LLM_CTX_SIZE:    "131072"
+  LLM_MAX_TOKENS:  "4096"
+  LLM_TEMPERATURE: "0.1"
+
+# ── 共用 Logging 設定 ─────────────────────────────────────────────────
+# json-file：JSON 格式，適合 ELK / Loki 接收；每檔最大 10MB，保留 5 個輪轉檔
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+    labels:   "service,version"
+    env:      "APP_ENV,BUILD_VERSION"
+
+services:
+
+  # ──────────────────────────────────────────────────────────────────
+  # [1] model-init — 首次啟動自動從 HuggingFace 下載 GGUF 模型
+  # ──────────────────────────────────────────────────────────────────
+  model-init:
+    image: python:3.11-slim
+    container_name: model-init
+    volumes:
+      - model-data:/models
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+      - MODEL_REPO=${MODEL_REPO:-bartowski/google_gemma-4-e4b-it-GGUF}
+      - MODEL_FILE=${MODEL_FILE:-gemma-4-e4b-it-Q4_K_M.gguf}
+      - HF_HUB_DISABLE_PROGRESS_BARS=0
+    command: >
+      /bin/bash -c "
+        MODEL=/models/$${MODEL_FILE} ;
+        if [ -f \"$$MODEL\" ]; then
+          echo '✓ 模型已存在，跳過下載。' ;
+          ls -lh $$MODEL ;
+          exit 0 ;
+        fi ;
+        echo '正在安裝 huggingface_hub...' ;
+        pip install -q huggingface_hub ;
+        echo '開始下載 Gemma 4 E4B GGUF Q4_K_M (~4GB)...' ;
+        python3 -c "
+          from huggingface_hub import hf_hub_download ;
+          import os ;
+          token = os.environ.get('HF_TOKEN') or None ;
+          repo  = os.environ.get('MODEL_REPO', 'bartowski/google_gemma-4-e4b-it-GGUF') ;
+          fname = os.environ.get('MODEL_FILE', 'gemma-4-e4b-it-Q4_K_M.gguf') ;
+          print(f'下載 {repo}/{fname}') ;
+          path  = hf_hub_download(repo_id=repo, filename=fname, token=token, local_dir='/models', local_dir_use_symlinks=False) ;
+          print(f'完成: {path}') ;
+          import subprocess ; subprocess.run(['ls','-lh','/models'])
+        " ;
+      "
+    restart: "no"
+    logging: *default-logging
+
+  # ──────────────────────────────────────────────────────────────────
+  # [2] mosquitto — Eclipse MQTT Broker (Port 1883 / WS 9001)
+  #     Topic 格式：xcloud/{device_id}/{sensor_type}
+  # ──────────────────────────────────────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: xcloud-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"    # MQTT TCP
+      - "9001:9001"    # MQTT over WebSocket
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -p 1883 -t 'health/ping' -m 'ping' -q 0 2>/dev/null && echo ok || exit 1"]
+      interval: 15s
+      timeout:  5s
+      retries:  3
+      start_period: 10s
+    logging: *default-logging
+
+  # ──────────────────────────────────────────────────────────────────
+  # [3] llama-cpp — OpenAI 相容 API (Port 8080)
+  #     架構圖：MIDDLE LAYER → llama.cpp Server Port 8080
+  # ──────────────────────────────────────────────────────────────────
+  llama-cpp:
+    image: ghcr.io/nvidia-ai-iot/llama_cpp:r36.4-tegra-aarch64-cu126-22.04
+    container_name: llama-cpp
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - model-data:/models:ro
+    # Gemma 4 E4B: 128K context, Q4_K_M ~4GB VRAM
+    # AIR-030 64GB 剩餘記憶體全做 KV Cache
+    command: >
+      /bin/bash -c "
+        echo 'Waiting for model...' ;
+        until [ -f /models/$${MODEL_FILE:-gemma-4-e4b-it-Q4_K_M.gguf} ]; do
+          sleep 5 ;
+        done ;
+        echo 'Starting llama-server...' ;
+        llama-server
+          --model /models/gemma-4-e4b-it-Q4_K_M.gguf
+          --host 0.0.0.0
+          --port 8080
+          --n-gpu-layers 999
+          --ctx-size 131072
+          --threads 8
+          --batch-size 512
+          --ubatch-size 512
+          --embedding
+          --alias gemma-4-e4b-it
+          --log-disable
+      "
+    ports:
+      - "8080:8080"
+    depends_on:
+      model-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 20s
+      timeout:  10s
+      retries:  10
+      start_period: 120s   # 模型載入需要時間
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count:  all
+              capabilities: [gpu]
+    logging: *default-logging
+
+  # ──────────────────────────────────────────────────────────────────
+  # [4] vlm-webui — Live VLM WebUI (Port 8090, WebRTC)
+  #     架構圖：MIDDLE LAYER → Live VLM WebUI Port 8090
+  # ──────────────────────────────────────────────────────────────────
+  vlm-webui:
+    build:
+      context:    ./vlm-webui
+      dockerfile: Dockerfile.vlm
+    container_name: vlm-webui
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - LIVE_VLM_API_BASE=http://llama-cpp:8080/v1
+      - LIVE_VLM_PORT=8090
+      - LIVE_VLM_HOST=0.0.0.0
+    ports:
+      - "8090:8090"
+      - "49152-49200:49152-49200/udp"    # WebRTC ICE UDP
+    volumes:
+      - ./ssl:/ssl:ro
+    depends_on:
+      llama-cpp:
+        condition: service_healthy
+    devices:
+      - /dev/video0:/dev/video0    # USB 鏡頭（可選）
+    healthcheck:
+      # HTTP GET / → 任何 2xx/3xx 視為健康
+      test: ["CMD", "curl", "-sf", "--max-time", "4", "http://localhost:8090/"]
+      interval: 30s
+      timeout:  10s
+      retries:  5
+      start_period: 20s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count:  all
+              capabilities: [gpu]
+    logging: *default-logging
+
+  # ──────────────────────────────────────────────────────────────────
+  # [5] backend — FastAPI 中介層 (Port 8000)
+  #     架構圖：BOTTOM LAYER → FastAPI 中介層
+  # ──────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context:    ./backend
+      dockerfile: Dockerfile
+    container_name: xcloud-backend
+    restart: unless-stopped
+    environment:
+      <<: *llm-env
+      APP_NAME:           "xCloudVLMui Platform"
+      VLM_WEBUI_URL:      http://vlm-webui:8090
+      DATABASE_URL:       sqlite+aiosqlite:////data/xcloudvlm.db
+      CHROMA_PERSIST_DIR: /data/chroma
+      ALLOWED_ORIGINS:    '["http://localhost:3000","http://localhost","http://air-030"]'
+      DEBUG:              "false"
+      MQTT_BROKER_HOST:   mosquitto
+      MQTT_BROKER_PORT:   "1883"
+      MQTT_ENABLED:       "true"
+    env_file:
+      - path: ./backend/.env
+        required: false
+    volumes:
+      - backend-data:/data
+      - ./backend/uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      llama-cpp:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/api/health"]
+      interval: 20s
+      timeout:  10s
+      retries:  5
+      start_period: 30s
+    logging: *default-logging
+
+  # ──────────────────────────────────────────────────────────────────
+  # [6] frontend — Next.js Web Dashboard (Port 3000)
+  #     架構圖：BOTTOM LAYER → Web 儀表板
+  # ──────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context:    ./frontend
+      dockerfile: Dockerfile
+    container_name: xcloud-frontend
+    restart: unless-stopped
+    environment:
+      - NEXTAUTH_URL=http://localhost
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NEXT_PUBLIC_VLM_WEBUI_URL=http://localhost/vlm
+      - NODE_ENV=production
+    env_file:
+      - path: ./frontend/.env.local
+        required: false
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000"]
+      interval: 20s
+      timeout:  10s
+      retries:  5
+      start_period: 15s
+    logging: *default-logging
+
+  # ──────────────────────────────────────────────────────────────────
+  # [7] nginx — 反向代理 (Port 80)
+  # ──────────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: xcloud-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+      - vlm-webui
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/api/health"]
+      interval: 30s
+      timeout:  5s
+      retries:  3
+      start_period: 10s
+    logging: *default-logging
+
+  # ──────────────────────────────────────────────────────────────────
+  # [8] cadvisor — 容器資源監控（CPU / 記憶體 / 磁碟 / 網路）
+  #     3.3 監控與可觀測性：對應 RISK R001（VRAM 耗盡）、R005（磁碟空間）
+  #     Web UI：http://AIR-030-IP:8091
+  #     Metrics：http://AIR-030-IP:8091/metrics（Prometheus 格式）
+  #     資源使用：~50MB RAM（AIR-030 64GB 的 0.08%，可安全運行）
+  # ──────────────────────────────────────────────────────────────────
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: xcloud-cadvisor
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "8091:8080"    # cAdvisor Web UI & Prometheus metrics
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    command:
+      - "--housekeeping_interval=15s"    # 每 15 秒採集一次（降低 CPU 開銷）
+      - "--max_housekeeping_interval=20s"
+      - "--event_storage_event_limit=default=0"
+      - "--event_storage_age_limit=default=0"
+      - "--disable_metrics=advtcp,cpuset,hugetlb,memory_numa,process,referenced_memory,resctrl,sched,tcp,udp"
+      - "--store_container_labels=false"
+      - "--whitelisted_container_labels=io.kubernetes.container.name,io.kubernetes.pod.name"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout:  5s
+      retries:  3
+      start_period: 10s
+    logging: *default-logging
+
+# ── Named Volumes ────────────────────────────────────────────────────
+volumes:
+  model-data:        # GGUF 模型檔案（由 model-init 下載）
+    driver: local
+  backend-data:      # SQLite DB + ChromaDB vector store
+    driver: local
+  mosquitto-data:    # MQTT Broker 持久化訊息
+    driver: local
+  mosquitto-log:     # MQTT Broker 日誌
+    driver: local
+
+networks:
+  default:
+    name: xcloud-net

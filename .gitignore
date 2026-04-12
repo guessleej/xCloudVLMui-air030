@@ -1,0 +1,40 @@
+# Node
+node_modules/
+.next/
+dist/
+.npm
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Env / Secrets
+.env
+.env.local
+.env.production
+frontend/.env.local
+backend/.env
+
+# Database / Vector DB
+*.db
+*.db-journal
+chroma_data/
+backend/chroma_data/
+backend/uploads/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models (大型 GGUF 檔案請另外管理)
+models/*.gguf
+models/*.bin
+
+# IDE
+.vscode/
+.idea/
+*.swp
