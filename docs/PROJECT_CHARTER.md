@@ -12,9 +12,10 @@
 
 ## 1. 專案概述（Project Overview）
 
-**xCloudVLMui Platform** 是部署於 Advantech AIR-030（Jetson AGX Orin 64GB）邊緣計算主機的
-**工業設備視覺智慧巡檢平台**。整合視覺語言模型（VLM）、檢索增強生成（RAG）與感測器物聯網（IoT），
-提供全自動設備健康評分、異常診斷、維保工單產生與知識庫問答，取代傳統人工巡檢。
+**xCloudVLMui Platform** 是由 **云碩科技 xCloudinfo Corp.Limited** 開發，部署於 Advantech AIR-030
+（Jetson AGX Orin 64GB）邊緣主機的**工廠設備健康管理平台**。整合視覺語言模型（VLM）、
+檢索增強生成（RAG）與感測器物聯網（IoT），提供全自動設備健康評分、異常診斷、維保工單產生
+與知識庫問答，取代傳統人工巡檢。
 
 ---
 

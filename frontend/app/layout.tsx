@@ -6,7 +6,7 @@ import AuthProvider from "@/components/auth/auth-provider";
 
 export const metadata: Metadata = {
   title: "xCloudVLMui",
-  description: "AIR-030 製造業設備維護戰情中心",
+  description: "由 云碩科技 xCloudinfo Corp.Limited 開發，專為 Advantech AIR-030 (Jetson AGX Orin 64GB) 邊緣主機設計的工廠設備健康管理平台",
   icons: { icon: "/favicon.svg" },
 };
 

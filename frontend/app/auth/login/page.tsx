@@ -125,8 +125,9 @@ export default function LoginPage() {
                   Platform
                 </h1>
                 <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-                  以邊緣 AI 將即時影像、設備診斷、知識檢索與維護輸出整合為同一套操作體驗，
-                  協助技術人員在現場完成快速排障與預防維護判斷。
+                  由 云碩科技 xCloudinfo Corp.Limited 開發，專為 Advantech AIR-030
+                  (Jetson AGX Orin 64GB) 邊緣主機設計的工廠設備健康管理平台，
+                  整合視覺 AI、MQTT 感測器與 RAG 知識庫，協助技術人員快速排障與預防維護。
                 </p>
               </div>
             </div>

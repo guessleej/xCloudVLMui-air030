@@ -111,8 +111,8 @@ jobs:
             type=raw,value=latest,enable=${{ needs.validate-tag.outputs.is_prerel == 'false' }}
           labels: |
             org.opencontainers.image.title=xCloudVLMui Platform — ${{ matrix.service }}
-            org.opencontainers.image.description=AIR-030 Jetson 工業設備視覺智慧平台
-            org.opencontainers.image.vendor=xCloudVLMui
+            org.opencontainers.image.description=由 云碩科技 xCloudinfo Corp.Limited 開發，專為 Advantech AIR-030 (Jetson AGX Orin 64GB) 邊緣主機設計的工廠設備健康管理平台
+            org.opencontainers.image.vendor=云碩科技 xCloudinfo Corp.Limited
 
       - name: Build & Push ${{ matrix.service }}
         uses: docker/build-push-action@v5

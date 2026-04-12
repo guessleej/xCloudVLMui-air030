@@ -104,7 +104,7 @@
 
 ### Added
 
-- AIR-030 工業設備視覺智慧巡檢平台基礎架構
+- AIR-030 工廠設備健康管理平台基礎架構
 - 7 服務 Docker Compose 部署（model-init / llama-cpp / vlm-webui / backend / frontend / nginx）
 - FastAPI + SQLAlchemy async 後端（aiosqlite + Pydantic v2）
 - Next.js 14 App Router 前端 + NextAuth OAuth 認證

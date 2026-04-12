@@ -3,7 +3,7 @@
 
 # xCloudVLMui
 
-**邊緣視覺推論 × 設備維護管理平台**
+**工廠設備健康管理平台**
 
 [![Platform](https://img.shields.io/badge/Platform-Jetson%20AGX%20Orin%2064GB-76b900?logo=nvidia&logoColor=white)](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-agx-orin/)
 [![JetPack](https://img.shields.io/badge/JetPack-6.0-76b900?logo=nvidia&logoColor=white)](https://developer.nvidia.com/embedded/jetpack)
@@ -14,7 +14,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Compose%20v2-2496ED?logo=docker&logoColor=white)]()
 [![License](https://img.shields.io/badge/License-Proprietary-red)]()
 
-> 由 [云碩科技 xCloud Technology](https://www.cloudinfo.com.tw) 開發
+> 由 **云碩科技 xCloudinfo Corp.Limited** 開發
 > 專為 **Advantech AIR-030 (Jetson AGX Orin 64GB)** 邊緣主機設計的工廠設備健康管理平台
 
 </div>
@@ -36,7 +36,7 @@
 
 ## 產品概述
 
-**xCloudVLMui** 是一套執行於 Advantech AIR-030 邊緣運算主機的**完全離線**設備維護管理平台，結合：
+**xCloudVLMui** 是一套由 **云碩科技 xCloudinfo Corp.Limited** 開發，執行於 Advantech AIR-030 邊緣主機的**工廠設備健康管理平台**，結合：
 
 | 能力 | 說明 |
 |-----|------|
@@ -259,9 +259,9 @@ make release-amd64  # x86_64 打包（測試用）
 
 <div align="center">
 
-**云碩科技 xCloud Technology Corp. Ltd.**
+**云碩科技 xCloudinfo Corp.Limited**
 © 2026 All rights reserved. Proprietary & Confidential.
 
-[官網](https://www.cloudinfo.com.tw) · [API 文件](http://localhost/docs) · [問題回報](https://github.com/guessleej/xCloudVLMui/issues)
+[API 文件](http://localhost/docs) · [問題回報](https://github.com/guessleej/xCloudVLMui/issues)
 
 </div>

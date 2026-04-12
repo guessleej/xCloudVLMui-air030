@@ -96,7 +96,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=       settings.app_name,
     version=     "1.1.0",
-    description= "xCloudVLMui Platform — AIR-030 × Gemma 4 E4B × ChromaDB 設備視覺智慧平台",
+    description= "xCloudVLMui Platform — 由 云碩科技 xCloudinfo Corp.Limited 開發，專為 Advantech AIR-030 (Jetson AGX Orin 64GB) 邊緣主機設計的工廠設備健康管理平台",
     lifespan=    lifespan,
     docs_url=    "/docs",
     redoc_url=   "/redoc",
