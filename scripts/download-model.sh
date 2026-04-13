@@ -11,11 +11,10 @@
 set -euo pipefail
 
 MODELS_DIR="$(cd "$(dirname "$0")/.." && pwd)/models"
-MODEL_FILENAME="gemma-4-e4b-it-Q4_K_M.gguf"
+MODEL_FILENAME="gemma-4-E4B-it-Q4_K_M.gguf"
 MODEL_PATH="${MODELS_DIR}/${MODEL_FILENAME}"
 
-# HuggingFace GGUF 量化版本（bartowski 社群量化，最常見的 GGUF 來源）
-HF_REPO="bartowski/google_gemma-4-e4b-it-GGUF"
+HF_REPO="unsloth/gemma-4-E4B-it-GGUF"
 HF_FILE="${MODEL_FILENAME}"
 HF_URL="https://huggingface.co/${HF_REPO}/resolve/main/${HF_FILE}"
 
