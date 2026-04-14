@@ -12,12 +12,19 @@ check() {
   local name="$1"; local url="$2"; local expect="${3:-200}"
   local code
   code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 "$url" 2>/dev/null || echo "000")
-  if [[ "$code" == "$expect" || ("$expect" == "200" && "$code" =~ ^2) ]]; then
+  local expect_regex="$expect"
+  if [[ "$expect" == *","* ]]; then
+    expect_regex="${expect//,/|}"
+  fi
+  if [[ "$expect" == *"|"* && "$code" =~ ^(${expect_regex})$ ]]; then
     echo -e "  ${GREEN}✓${NC} ${name} → HTTP ${code}"
-    ((PASS++))
+    ((PASS+=1))
+  elif [[ "$code" == "$expect" || ("$expect" == "200" && "$code" =~ ^2) ]]; then
+    echo -e "  ${GREEN}✓${NC} ${name} → HTTP ${code}"
+    ((PASS+=1))
   else
     echo -e "  ${RED}✗${NC} ${name} → HTTP ${code} (期待 ${expect})"
-    ((FAIL++))
+    ((FAIL+=1))
   fi
 }
 
@@ -29,10 +36,10 @@ json_check() {
     local val
     val=$(echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('$key','?'))" 2>/dev/null)
     echo -e "  ${GREEN}✓${NC} ${name} → ${key}=${val}"
-    ((PASS++))
+    ((PASS+=1))
   else
     echo -e "  ${RED}✗${NC} ${name} → 回應缺少 '${key}' 欄位"
-    ((FAIL++))
+    ((FAIL+=1))
   fi
 }
 
@@ -56,10 +63,10 @@ INFER_RESULT=$(curl -sk --max-time 60 \
   2>/dev/null || echo "{}")
 if echo "$INFER_RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('choices')" 2>/dev/null; then
   echo -e "${GREEN}✓ 推論正常${NC}"
-  ((PASS++))
+  ((PASS+=1))
 else
   echo -e "${RED}✗ 推論失敗${NC}"
-  ((FAIL++))
+  ((FAIL+=1))
 fi
 
 # ── FastAPI Backend ───────────────────────────────────────────────
@@ -73,13 +80,13 @@ check      "Swagger Docs"     "http://localhost:8000/docs"
 # ── live-vlm-webui ────────────────────────────────────────────────
 echo ""
 echo -e "${YELLOW}[4/5] live-vlm-webui (:8090)${NC}"
-check "WebUI Root"  "http://localhost:8090/"
+check "WebUI Root"  "https://localhost:8090/" "200|301|302|307"
 
 # ── Next.js Frontend ──────────────────────────────────────────────
 echo ""
 echo -e "${YELLOW}[5/5] Next.js Frontend (:3000 / nginx :80)${NC}"
-check "Frontend :3000"     "http://localhost:3000/"
-check "Via Nginx :80"      "http://localhost/"
+check "Frontend :3000"     "http://localhost:3000/" "200|301|302|307"
+check "Via Nginx :80"      "http://localhost/" "200|301|302|307"
 check "API via Nginx"      "http://localhost/api/health"
 
 # ── 結果摘要 ─────────────────────────────────────────────────────

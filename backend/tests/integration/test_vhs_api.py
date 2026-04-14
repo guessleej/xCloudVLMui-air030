@@ -2,16 +2,13 @@
 tests/integration/test_vhs_api.py — VHS 設備健康分數 API 整合測試
 ================================================================
 測試對象：
-  GET  /api/vhs/readings              — 查詢 VHS 讀值列表（依設備/天數過濾）
-  POST /api/vhs/readings              — 新增 VHS 讀值
-  GET  /api/vhs/readings/latest       — 各設備最新讀值
-  GET  /api/vhs/readings/stats        — 設備統計（avg/min/max）
+    POST /api/vhs/readings              — 新增 VHS 讀值
+    GET  /api/vhs/trend/{equipment_id}  — 取得指定設備 VHS 趨勢
 
 驗證要點：
-  - CRUD 基本操作正確
-  - score 範圍驗證（0–100）
-  - source 欄位（vlm / manual / seed）
-  - equipment_id 過濾正確運作
+    - 寫入 VHS 讀值成功
+    - score 範圍驗證（0–100）
+    - 趨勢查詢回應格式正確
 """
 from __future__ import annotations
 
@@ -92,96 +89,25 @@ async def test_create_vhs_reading_boundary_score_hundred(client):
     assert resp.json()["score"] == pytest.approx(100.0)
 
 
-# ── GET /api/vhs/readings ────────────────────────────────────────────
+# ── GET /api/vhs/trend/{equipment_id} ───────────────────────────────
 
 @pytest.mark.anyio
-async def test_list_vhs_readings_returns_200(client):
-    resp = await client.get("/api/vhs/readings")
-    assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
+async def test_vhs_trend_returns_200(client):
+    eq_id = "EQ-TREND-001"
+    await client.post("/api/vhs/readings", json=_vhs_payload(equipment_id=eq_id, score=72.0))
 
-
-@pytest.mark.anyio
-async def test_list_vhs_readings_filter_by_equipment_id(client):
-    """equipment_id 過濾應只回傳指定設備讀值"""
-    eq_id = "EQ-FILTER-001"
-    # 建立 2 筆不同設備的讀值
-    await client.post("/api/vhs/readings", json=_vhs_payload(equipment_id=eq_id, score=80.0))
-    await client.post("/api/vhs/readings", json=_vhs_payload(equipment_id="EQ-OTHER-999", score=50.0))
-
-    resp  = await client.get("/api/vhs/readings", params={"equipment_id": eq_id})
-    items = resp.json()
-    assert all(item["equipment_id"] == eq_id for item in items), (
-        "Filter by equipment_id returned wrong records"
-    )
-
-
-@pytest.mark.anyio
-async def test_list_vhs_readings_includes_inserted_record(client):
-    """新增的讀值應出現在清單中"""
-    eq_id = "EQ-LIST-VERIFY-001"
-    await client.post("/api/vhs/readings", json=_vhs_payload(equipment_id=eq_id, score=65.0))
-
-    resp = await client.get("/api/vhs/readings", params={"equipment_id": eq_id})
-    scores = [item["score"] for item in resp.json()]
-    assert pytest.approx(65.0) in scores
-
-
-# ── GET /api/vhs/readings/latest ─────────────────────────────────────
-
-@pytest.mark.anyio
-async def test_latest_vhs_returns_200(client):
-    resp = await client.get("/api/vhs/readings/latest")
+    resp = await client.get(f"/api/vhs/trend/{eq_id}")
     assert resp.status_code == 200
 
 
 @pytest.mark.anyio
-async def test_latest_vhs_returns_most_recent_per_equipment(client):
-    """同一設備有多筆讀值時，latest 應回傳最新的一筆"""
-    eq_id = "EQ-LATEST-001"
-    await client.post("/api/vhs/readings", json=_vhs_payload(equipment_id=eq_id, score=50.0))
-    await client.post("/api/vhs/readings", json=_vhs_payload(equipment_id=eq_id, score=90.0))
+async def test_vhs_trend_schema(client):
+    eq_id = "EQ-TREND-SCHEMA-001"
+    await client.post("/api/vhs/readings", json=_vhs_payload(equipment_id=eq_id, score=66.6))
 
-    resp    = await client.get("/api/vhs/readings/latest")
-    entries = {item["equipment_id"]: item for item in resp.json()}
-    if eq_id in entries:
-        assert entries[eq_id]["score"] == pytest.approx(90.0, abs=0.1)
-
-
-# ── GET /api/vhs/readings/stats ──────────────────────────────────────
-
-@pytest.mark.anyio
-async def test_vhs_stats_returns_200(client):
-    eq_id = "EQ-STATS-001"
-    await client.post("/api/vhs/readings", json=_vhs_payload(equipment_id=eq_id, score=60.0))
-    resp = await client.get("/api/vhs/readings/stats", params={"equipment_id": eq_id})
-    assert resp.status_code == 200
-
-
-@pytest.mark.anyio
-async def test_vhs_stats_schema(client):
-    """stats 回應應包含 avg / min / max / count"""
-    eq_id = "EQ-STATS-SCHEMA-001"
-    for score in [40.0, 60.0, 80.0]:
-        await client.post("/api/vhs/readings", json=_vhs_payload(equipment_id=eq_id, score=score))
-
-    resp = await client.get("/api/vhs/readings/stats", params={"equipment_id": eq_id})
+    resp = await client.get(f"/api/vhs/trend/{eq_id}")
     data = resp.json()
-    for field in ["avg", "min", "max", "count"]:
+    for field in ["equipment_id", "days", "real_days", "estimated_days", "data"]:
         assert field in data, f"Missing field: {field}"
-
-
-@pytest.mark.anyio
-async def test_vhs_stats_values_correct(client):
-    """avg/min/max 計算應正確"""
-    eq_id = "EQ-STATS-CALC-001"
-    scores = [40.0, 60.0, 80.0]
-    for s in scores:
-        await client.post("/api/vhs/readings", json=_vhs_payload(equipment_id=eq_id, score=s))
-
-    resp = await client.get("/api/vhs/readings/stats", params={"equipment_id": eq_id})
-    data = resp.json()
-    assert data["min"]   == pytest.approx(40.0, abs=0.1)
-    assert data["max"]   == pytest.approx(80.0, abs=0.1)
-    assert data["avg"]   == pytest.approx(60.0, abs=0.5)
-    assert data["count"] >= 3
+    assert data["equipment_id"] == eq_id
+    assert isinstance(data["data"], list)

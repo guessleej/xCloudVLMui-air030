@@ -7,7 +7,9 @@ import axios from "axios";
 import { getSession } from "next-auth/react";
 import type { VlmSessionCapture, FactoryEvent, EventStats } from "@/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// 使用相對路徑（空字串）讓請求走當前域名，透過 Nginx proxy 轉發
+// 本機開發可設為 http://localhost:8000，生產環境留空
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 const apiClient = axios.create({
   baseURL: API_BASE,
