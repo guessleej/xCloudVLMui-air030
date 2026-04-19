@@ -2,6 +2,7 @@ import {
   ActivitySquare,
   BookOpenText,
   Camera,
+  Cpu,
   FileSearch,
   Radio,
   Settings2,
@@ -60,6 +61,13 @@ export const NAV_ITEMS = [
     badge: "LOG",
   },
   {
+    href: "/main/models",
+    icon: Cpu,
+    label: "模型管理",
+    sublabel: "YOLO 模型登錄、啟用、效能指標",
+    badge: "AI",
+  },
+  {
     href: "/main/settings",
     icon: Settings2,
     label: "系統設定",
@@ -111,5 +119,10 @@ export const PAGE_META: Record<
     title: "事件中心",
     description: "收集全站所有操作日誌與系統事件，提供即時追蹤、等級過濾與備查功能。",
     eyebrow: "System Events",
+  },
+  "/main/models": {
+    title: "視覺模型管理",
+    description: "登錄、啟用並管理 YOLO ONNX 推論模型，支援 detect / pose / segment / classify / obb 五種任務類型。",
+    eyebrow: "Model Registry",
   },
 };

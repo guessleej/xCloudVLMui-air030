@@ -1,6 +1,26 @@
-// next.config.mjs — Next.js 14 設定（.ts 格式僅 Next.js 15+ 支援）
+// next.config.mjs — Next.js 14 設定
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // ── onnxruntime-web：解決 ESM .mjs 與 Terser/Webpack 5 相容問題 ─────
+  webpack: (config, { isServer }) => {
+    // 讓 webpack 正確處理 node_modules 中的 .mjs ESM 模組
+    config.module.rules.push({
+      test: /\.mjs$/,
+      include: /node_modules/,
+      type: "javascript/auto",
+      resolve: { fullySpecified: false },
+    });
+
+    if (!isServer) {
+      // 瀏覽器端：排除 Node.js 專用模組
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false, path: false, crypto: false,
+      };
+    }
+    return config;
+  },
+
   // 允許將 live-vlm-webui 嵌入 iframe
   async headers() {
     return [
@@ -14,7 +34,7 @@ const nextConfig = {
     ];
   },
 
-  // 反向代理：/vlm-api/* → llama.cpp :8080
+  // 反向代理
   async rewrites() {
     return [
       {
@@ -28,7 +48,6 @@ const nextConfig = {
     ];
   },
 
-  // 允許外部圖片域名（Next.js 14 使用 remotePatterns）
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "avatars.githubusercontent.com", pathname: "/**" },
@@ -37,10 +56,7 @@ const nextConfig = {
     ],
   },
 
-  // 關閉嚴格模式以相容 WebRTC iframe
   reactStrictMode: false,
-
-  // Docker 多階段建置需要 standalone 輸出
   output: "standalone",
 };
 

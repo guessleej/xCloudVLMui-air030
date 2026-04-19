@@ -32,6 +32,9 @@ from routers import (
     chat         as chat_router,
     feature_flags as feature_flags_router,
     rag,           # backward-compat shim（/api/rag/*）
+    vision as vision_router,
+    models as models_router,
+    events as events_router,
 )
 from middleware.syslog_middleware import SyslogMiddleware
 from models.schemas import HealthResponse
@@ -54,8 +57,42 @@ async def lifespan(app: FastAPI):
     await init_syslog_db()
     logger.info("Syslog DB initialised (syslog.db).")
     await log_startup()
+
+    # ── 啟動時從 DB 載入使用者設定，套用到 live config ───────────────
+    try:
+        from sqlalchemy.ext.asyncio import AsyncSession as _AS
+        from database import engine as _async_engine
+        from models.db_models import SystemSettings as _SS
+        from routers.settings import apply_settings_to_live_config
+        async with _AS(_async_engine) as _db:
+            _rows = await _db.execute(__import__("sqlalchemy").select(_SS))
+            _db_settings = {r.key: r.value for r in _rows.scalars().all() if r.value}
+        if _db_settings:
+            apply_settings_to_live_config(_db_settings)
+            logger.info("DB settings loaded and applied: %s", list(_db_settings.keys()))
+    except Exception as _e:
+        logger.warning("Could not load DB settings on startup: %s", _e)
+
+    # ── 啟動時植入預設 YOLO 模型種子資料 ──────────────────────────────
+    try:
+        from sqlalchemy.ext.asyncio import AsyncSession as _AS2
+        from database import engine as _async_engine2
+        from routers.models import seed_default_models
+        async with _AS2(_async_engine2) as _mdb:
+            await seed_default_models(_mdb)
+    except Exception as _me:
+        logger.warning("Could not seed default models: %s", _me)
+
+    # ── 啟動時植入行為安全 SOP 知識文件至 ChromaDB ───────────────────────
+    try:
+        from services.behavior_seed import seed_behavior_knowledge
+        await seed_behavior_knowledge()
+    except Exception as _be:
+        logger.warning("Behavior seed failed (non-fatal): %s", _be)
+
     logger.info("ChromaDB ready: %s", settings.chroma_persist_dir)
     logger.info("LLM endpoint: %s", settings.llm_base_url)
+    logger.info("Embed model:  %s", settings.embed_model)
     logger.info("VLM WebUI:    %s", settings.vlm_webui_url)
 
     # ── 背景任務啟動 ─────────────────────────────────────────────────
@@ -166,6 +203,9 @@ app.include_router(vlm.router)
 app.include_router(settings_router.router)
 app.include_router(mqtt_router.router)
 app.include_router(syslog_router.router)
+app.include_router(vision_router.router)   # /api/vision
+app.include_router(models_router.router)   # /api/models
+app.include_router(events_router.router)   # /api/events
 
 # ── Health Check ──────────────────────────────────────────────────────
 @app.get("/api/health", response_model=HealthResponse, tags=["system"])
@@ -191,12 +231,18 @@ async def health_check():
     except Exception as _e:
         logger.warning("Health check — DB error: %s", _e)
 
-    # ── [2] LLM 檢查：llama.cpp HTTP /health ────────────────────────
+    # ── [2] LLM 檢查：依序嘗試 /health（llama.cpp）、/（Ollama）、/v1/models ──
     llm_ok = False
     try:
         async with httpx.AsyncClient(timeout=3.0) as c:
-            r      = await c.get(f"{settings.llm_base_url}/health")
-            llm_ok = r.status_code == 200
+            for path in ("/health", "/", "/v1/models"):
+                try:
+                    r = await c.get(f"{settings.llm_base_url}{path}")
+                    if r.status_code == 200:
+                        llm_ok = True
+                        break
+                except Exception:
+                    continue
     except Exception as _e:
         logger.warning("Health check — LLM error: %s", _e)
 

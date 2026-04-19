@@ -85,13 +85,14 @@ async def capture_vlm_session(
 ):
     """
     VLM WebUI 巡檢結束後前端觸發。
-    自動以 raw_vlm_json 產生 MD 報告並儲存至資料庫。
+    若前端已提供 markdown_content 直接存入；否則以 raw_vlm_json 轉換。
     """
     data = ReportCreate(
-        title=          f"VLM 巡檢報告 — {payload.captured_at[:16]}",
-        risk_level=     _infer_risk(payload.raw_vlm_json),
-        source=         payload.source,
-        raw_vlm_json=   payload.raw_vlm_json,
+        title=            payload.title or f"現場巡檢報告 — {payload.captured_at[:16]}",
+        risk_level=       payload.risk_level or _infer_risk(payload.raw_vlm_json),
+        source=           payload.source,
+        markdown_content= payload.markdown_content,   # 直接使用（若有）
+        raw_vlm_json=     payload.raw_vlm_json,
     )
     report = await create_report(db, data)
     return report_to_out(report)

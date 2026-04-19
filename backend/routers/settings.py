@@ -1,5 +1,11 @@
 """
 routers/settings.py — 系統設定管理（OCR 引擎、Embedding 模型、LLM 模型）
+
+設定生效機制：
+  1. DB 儲存（持久）：寫入 SQLite 的 system_settings 表
+  2. Live 套用（即時）：同步更新 config.py 的 in-memory Settings 物件，
+     讓 embedding_service / rag_service 無需重啟即可使用新值。
+  3. 啟動載入：app 啟動時讀取 DB 設定並套用，覆蓋 env var 預設值。
 """
 from __future__ import annotations
 import logging
@@ -16,17 +22,48 @@ from models.schemas import SettingsOut, SettingsUpdate, SettingItem
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
-# 預設設定
+# 預設設定（與 config.py 預設值一致）
 _DEFAULT_SETTINGS: dict[str, str] = {
     "ocr_engine":       "vlm",
     "embed_model_url":  "",
-    "embed_model_name": "gemma-4-e4b-it",
+    "embed_model_name": "nomic-embed-text",   # Ollama 向量嵌入模型
     "llm_model_url":    "",
-    "llm_model_name":   "gemma-4-e4b-it",
+    "llm_model_name":   "gemma4:e4b",         # Ollama 語言模型
     "chunk_size":       "800",
     "chunk_overlap":    "100",
     "rag_top_k":        "5",
 }
+
+# DB key → config.py Settings 屬性 對應表
+_DB_TO_CONFIG: dict[str, str] = {
+    "embed_model_name": "embed_model",
+    "llm_model_name":   "llm_model",
+    "llm_model_url":    "llm_base_url",    # 非空才覆蓋
+}
+
+
+def apply_settings_to_live_config(updates: dict[str, str]) -> None:
+    """
+    將 DB 設定同步套用到 in-memory config 物件（lru_cache singleton）。
+    讓 embedding_service / rag_service 不需重啟即可使用新值。
+    """
+    try:
+        from config import get_settings
+        live = get_settings()
+        for db_key, value in updates.items():
+            attr = _DB_TO_CONFIG.get(db_key)
+            if not attr or not value:
+                continue
+            # db_key="llm_model_url" 只在非空時才覆蓋 llm_base_url
+            if db_key == "llm_model_url" and not value.strip():
+                continue
+            try:
+                object.__setattr__(live, attr, value)
+                logger.info("Live config updated: %s = %s", attr, value)
+            except Exception as e:
+                logger.warning("Could not apply %s→%s: %s", db_key, attr, e)
+    except Exception as e:
+        logger.error("apply_settings_to_live_config failed: %s", e)
 
 _DESCRIPTIONS: dict[str, str] = {
     "ocr_engine":       "圖片文字辨識引擎（vlm = 使用 Gemma 視覺模型 | disabled = 停用 OCR）",
@@ -96,6 +133,10 @@ async def update_settings(
 
     await db.commit()
     logger.info("Settings updated: %s", list(updates.keys()))
+
+    # ── 即時套用到 in-memory config（不需重啟）──────────────────────
+    apply_settings_to_live_config(updates)
+
     return await get_settings(db)
 
 
@@ -107,4 +148,8 @@ async def reset_settings(db: AsyncSession = Depends(get_db)):
         await db.delete(row)
     await db.commit()
     logger.info("Settings reset to defaults.")
+
+    # ── 套用預設值到 live config ────────────────────────────────────
+    apply_settings_to_live_config(_DEFAULT_SETTINGS)
+
     return await get_settings(db)

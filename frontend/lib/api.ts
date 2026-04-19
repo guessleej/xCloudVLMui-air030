@@ -5,7 +5,7 @@
  */
 import axios from "axios";
 import { getSession } from "next-auth/react";
-import type { VlmSessionCapture } from "@/types";
+import type { VlmSessionCapture, FactoryEvent, EventStats } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -92,9 +92,9 @@ export const reportsApi = {
 
 // ── RAG ────────────────────────────────────────────────────────────
 export const ragApi = {
-  /** 語意問答 */
+  /** 語意問答（走 /api/chat/query 自動存歷史）*/
   query: (payload: { question: string; session_id?: string; top_k?: number }) =>
-    apiClient.post("/api/rag/query", payload),
+    apiClient.post("/api/chat/query", payload),
   /** 文件列表 */
   listDocuments: () =>
     apiClient.get("/api/rag/documents"),
@@ -114,15 +114,76 @@ export const ragApi = {
     }),
 };
 
+// ── Chat History ───────────────────────────────────────────────────
+export const chatHistoryApi = {
+  /** 查詢歷史列表 */
+  list: (params?: { session_id?: string; q?: string; limit?: number; offset?: number }) =>
+    apiClient.get("/api/chat/history", { params }),
+  /** 修改備註 */
+  updateNotes: (id: string, notes: string) =>
+    apiClient.patch(`/api/chat/history/${id}`, { notes }),
+  /** 刪除單筆 */
+  delete: (id: string) =>
+    apiClient.delete(`/api/chat/history/${id}`),
+  /** 清空全部（或指定 session） */
+  clearAll: (sessionId?: string) =>
+    apiClient.delete("/api/chat/history", { params: sessionId ? { session_id: sessionId } : {} }),
+};
+
+// ── Model Registry ─────────────────────────────────────────────────
+export const modelsApi = {
+  /** 列出所有模型 */
+  list: (params?: { task_type?: string; is_active?: boolean }) =>
+    apiClient.get("/api/models", { params }),
+  /** 取得各任務當前啟用模型 */
+  getActive: () =>
+    apiClient.get("/api/models/active"),
+  /** 取得單一模型 */
+  get: (id: string) =>
+    apiClient.get(`/api/models/${id}`),
+  /** 新增模型 */
+  create: (payload: Record<string, unknown>) =>
+    apiClient.post("/api/models", payload),
+  /** 修改模型 */
+  update: (id: string, payload: Record<string, unknown>) =>
+    apiClient.patch(`/api/models/${id}`, payload),
+  /** 刪除模型 */
+  delete: (id: string) =>
+    apiClient.delete(`/api/models/${id}`),
+  /** 啟用模型（同時停用同類型其他模型）*/
+  activate: (id: string) =>
+    apiClient.post(`/api/models/${id}/activate`),
+};
+
 // ── VLM ────────────────────────────────────────────────────────────
 export const vlmApi = {
-  /** 檢查 llama.cpp + live-vlm-webui 狀態 */
+  /** 檢查 llama.cpp 推論引擎狀態 */
   status: () =>
     apiClient.get("/api/vlm/status"),
-  /** 直接呼叫 VLM 診斷 */
-  diagnose: (payload: { prompt: string; image_base64?: string; max_tokens?: number }) =>
-    apiClient.post("/api/vlm/diagnose", payload),
+  /**
+   * 單次圖文診斷（HTTP POST，非串流）
+   * WebSocket 串流版本由 components/vlm/camera-stream.tsx 直接管理
+   */
+  diagnose: (payload: {
+    prompt:        string;
+    image_base64?: string;
+    max_tokens?:   number;
+    temperature?:  number;
+  }) => apiClient.post("/api/vlm/diagnose", payload),
 };
+
+/**
+ * 取得 VLM WebSocket 串流端點 URL
+ * 優先使用 NEXT_PUBLIC_WS_URL，否則從 window.location 推導（同源 Nginx 代理）
+ * 開發環境直連後端：設定 NEXT_PUBLIC_WS_URL=ws://localhost:8000
+ */
+export function getVlmWsUrl(): string {
+  if (typeof window === "undefined") return "ws://localhost:8000/api/vlm/ws";
+  const explicit = process.env.NEXT_PUBLIC_WS_URL;
+  if (explicit) return explicit.replace(/\/$/, "") + "/api/vlm/ws";
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${window.location.host}/api/vlm/ws`;
+}
 
 // ── Auth ────────────────────────────────────────────────────────────
 export const authApi = {
@@ -198,6 +259,32 @@ export const mqttDeviceApi = {
   /** 刪除閾值 */
   deleteThreshold: (deviceId: string, thresholdId: string) =>
     apiClient.delete(`/api/mqtt/devices/${deviceId}/thresholds/${thresholdId}`),
+};
+
+// ── Factory Events API ────────────────────────────────────────────────
+export const eventsApi = {
+  list: (params?: {
+    event_type?: string;
+    severity?: string;
+    resolved?: boolean;
+    since_h?: number;
+    limit?: number;
+    offset?: number;
+  }) => apiClient.get<FactoryEvent[]>("/api/events", { params }),
+
+  stats: () => apiClient.get<EventStats>("/api/events/stats"),
+
+  create: (data: Partial<FactoryEvent>) =>
+    apiClient.post<FactoryEvent>("/api/events", data),
+
+  acknowledge: (id: string) =>
+    apiClient.patch<FactoryEvent>(`/api/events/${id}/acknowledge`),
+
+  resolve: (id: string) =>
+    apiClient.patch<FactoryEvent>(`/api/events/${id}/resolve`),
+
+  delete: (id: string) =>
+    apiClient.delete(`/api/events/${id}`),
 };
 
 // ── 事件中心 API ──────────────────────────────────────────────────────

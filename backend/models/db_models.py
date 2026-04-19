@@ -179,3 +179,132 @@ class MqttAlertThreshold(Base):
     enabled:     Mapped[bool]          = mapped_column(Boolean,     default=True)
     created_at:  Mapped[datetime]      = mapped_column(DateTime(timezone=True), default=_now)
     updated_at:  Mapped[datetime]      = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class VisionSession(Base):
+    """視覺分析會話（YOLO + VLM 合併結果）
+
+    四種模式：
+      equipment — 設備巡檢（yolo26n detect + VLM，記錄 vhs_score）
+      people    — 人員辨識（yolo26n-pose + VLM，記錄 pose_keypoints）
+      events    — 事件偵測（yolo26n detect + SORT tracking + VLM，記錄 track_history）
+      objects   — 物品辨識（yolo26n detect + VLM，記錄 five_s_score）
+    """
+    __tablename__ = "vision_sessions"
+
+    id:             Mapped[str]            = mapped_column(String(64),   primary_key=True, default=lambda: str(_uuid.uuid4()))
+    mode:           Mapped[str]            = mapped_column(String(32),   nullable=False, index=True)
+    equipment_id:   Mapped[Optional[str]]  = mapped_column(String(64),   nullable=True,  index=True)
+
+    # VLM 分析
+    vlm_prompt:     Mapped[Optional[str]]  = mapped_column(Text,         nullable=True)
+    vlm_result:     Mapped[Optional[str]]  = mapped_column(Text,         nullable=True)
+    risk_level:     Mapped[Optional[str]]  = mapped_column(String(16),   nullable=True)   # critical|elevated|moderate|low
+    vhs_score:      Mapped[Optional[int]]  = mapped_column(Integer,      nullable=True)   # Equipment: 0–100
+    five_s_score:   Mapped[Optional[int]]  = mapped_column(Integer,      nullable=True)   # Objects: 5–25
+
+    # YOLO 偵測
+    yolo_model:     Mapped[str]            = mapped_column(String(64),   default="yolo26n")
+    yolo_task:      Mapped[str]            = mapped_column(String(32),   default="detect")  # detect|pose|track
+    detections:     Mapped[Optional[list]] = mapped_column(JSON,         nullable=True)    # [{classId,label,conf,x,y,w,h,risk,category}]
+    person_count:   Mapped[int]            = mapped_column(Integer,      default=0)
+    vehicle_count:  Mapped[int]            = mapped_column(Integer,      default=0)
+    hazard_count:   Mapped[int]            = mapped_column(Integer,      default=0)
+
+    # 模式專屬資料
+    pose_keypoints: Mapped[Optional[list]] = mapped_column(JSON,         nullable=True)   # People: [{personIdx, keypoints:[{name,x,y,v}×17]}]
+    track_history:  Mapped[Optional[list]] = mapped_column(JSON,         nullable=True)   # Events: [{trackId, classId, label, x,y,w,h, age, hits}]
+    segment_counts: Mapped[Optional[dict]] = mapped_column(JSON,         nullable=True)   # Objects: {className: count}
+
+    # 媒體（縮圖）
+    thumbnail:      Mapped[Optional[str]]  = mapped_column(Text,         nullable=True)   # base64 data URL（≤40KB）
+
+    # 計時
+    duration_ms:    Mapped[Optional[int]]  = mapped_column(Integer,      nullable=True)   # VLM 推論耗時
+
+    created_at:     Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class ChatHistory(Base):
+    """知識庫問答歷史紀錄（每次 RAG 問答自動儲存）"""
+    __tablename__ = "chat_history"
+
+    id:           Mapped[str]            = mapped_column(String(64),  primary_key=True, default=lambda: str(_uuid.uuid4()))
+    session_id:   Mapped[Optional[str]]  = mapped_column(String(64),  nullable=True,  index=True)  # 同一會話的群組 ID
+    question:     Mapped[str]            = mapped_column(Text,        nullable=False)
+    answer:       Mapped[str]            = mapped_column(Text,        nullable=False)
+    sources:      Mapped[Optional[list]] = mapped_column(JSON,        nullable=True)    # [{filename, chunk_index, score, preview}]
+    latency_ms:   Mapped[Optional[int]]  = mapped_column(Integer,     nullable=True)
+    notes:        Mapped[Optional[str]]  = mapped_column(Text,        nullable=True)    # 使用者備註（可修改）
+    is_deleted:   Mapped[bool]           = mapped_column(Boolean,     default=False,    index=True)
+    created_at:   Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    updated_at:   Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class FactoryEvent(Base):
+    """工廠事件紀錄（來自 VLM/YOLO 自動偵測或手動建立）"""
+    __tablename__ = "factory_events"
+
+    id:           Mapped[str]            = mapped_column(String(64),  primary_key=True, default=lambda: str(_uuid.uuid4()))
+    event_type:   Mapped[str]            = mapped_column(String(32),  nullable=False, index=True)   # detection|hazard|ppe_violation|equipment|system
+    severity:     Mapped[str]            = mapped_column(String(16),  nullable=False, index=True)   # critical|high|medium|low|info
+    title:        Mapped[str]            = mapped_column(String(256), nullable=False)
+    message:      Mapped[str]            = mapped_column(Text,        nullable=False)
+    source:       Mapped[str]            = mapped_column(String(32),  default="system")             # vlm|yolo|mqtt|system|manual
+    session_id:   Mapped[Optional[str]]  = mapped_column(String(64),  nullable=True, index=True)   # vision_sessions.id
+    equipment_id: Mapped[Optional[str]]  = mapped_column(String(64),  nullable=True, index=True)
+    location:     Mapped[Optional[str]]  = mapped_column(String(256), nullable=True)
+    extra:        Mapped[Optional[dict]] = mapped_column("event_meta", JSON, nullable=True)         # {detections, person_count, hazard_count, ...}
+    thumbnail:    Mapped[Optional[str]]  = mapped_column(Text,        nullable=True)                # base64 data URL
+    acknowledged: Mapped[bool]           = mapped_column(Boolean,     default=False, index=True)
+    resolved:     Mapped[bool]           = mapped_column(Boolean,     default=False, index=True)
+    resolved_at:  Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at:   Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class TrainedModel(Base):
+    """視覺推論模型登錄表（ONNX 模型管理）
+
+    task_type 枚舉：
+      detect   — 物件偵測 (yolo26n)          輸出 [1,300,6]
+      pose     — 姿態估計 (yolo26n-pose)      輸出 [1,300,57]
+      segment  — 實例分割 (yolo26n-seg)       輸出 [1,300,38+] + proto masks
+      classify — 影像分類 (yolo26n-cls)       輸出 [1,num_classes]
+      obb      — 旋轉框偵測 (yolo26n-obb)     輸出 [1,300,7]
+
+    model_format 枚舉：
+      e2e         — E2E One-to-One Head（YOLO26 預設，內建 NMS）
+      traditional — 傳統 head [1,84,8400]（YOLO11/v8 格式）
+    """
+    __tablename__ = "trained_models"
+
+    id:               Mapped[str]            = mapped_column(String(64),   primary_key=True, default=lambda: str(_uuid.uuid4()))
+    name:             Mapped[str]            = mapped_column(String(256),  nullable=False)
+    description:      Mapped[Optional[str]]  = mapped_column(Text,         nullable=True)
+
+    # 任務與檔案
+    task_type:        Mapped[str]            = mapped_column(String(32),   nullable=False, index=True)  # detect|pose|segment|classify|obb
+    model_filename:   Mapped[str]            = mapped_column(String(256),  nullable=False)              # 相對於 /public/models/
+    model_size_mb:    Mapped[Optional[float]] = mapped_column(Float,       nullable=True)
+    model_format:     Mapped[str]            = mapped_column(String(32),   default="e2e")               # e2e|traditional
+    output_shape:     Mapped[Optional[str]]  = mapped_column(String(64),   nullable=True)              # "[1,300,6]"
+    input_size:       Mapped[int]            = mapped_column(Integer,      default=640)                 # 輸入邊長（px）
+
+    # 類別
+    num_classes:      Mapped[int]            = mapped_column(Integer,      default=80)
+    class_names:      Mapped[Optional[list]] = mapped_column(JSON,         nullable=True)              # ["person","bicycle",…]
+    dataset_name:     Mapped[Optional[str]]  = mapped_column(String(128),  nullable=True)              # "COCO" | "custom"
+
+    # 狀態
+    is_active:        Mapped[bool]           = mapped_column(Boolean,      default=False, index=True)  # 該 task_type 當前啟用
+    is_builtin:       Mapped[bool]           = mapped_column(Boolean,      default=False)              # 系統預設，不可刪除
+    source:           Mapped[str]            = mapped_column(String(64),   default="ultralytics")      # ultralytics|custom|fine-tuned
+    base_model:       Mapped[Optional[str]]  = mapped_column(String(64),   nullable=True)              # "yolo26n"|"yolo11n"|…
+
+    # 效能指標
+    metrics:          Mapped[Optional[dict]] = mapped_column(JSON,         nullable=True)              # {mAP:40.9, precision:87, latency_ms:56}
+
+    # 備註與時間
+    notes:            Mapped[Optional[str]]  = mapped_column(Text,         nullable=True)
+    created_at:       Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    updated_at:       Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)

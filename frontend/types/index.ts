@@ -82,10 +82,13 @@ export interface Report {
 }
 
 export interface VlmSessionCapture {
-  session_id:    string;
-  source:        string;
-  captured_at:   string;
-  raw_vlm_json?: Record<string, unknown>;
+  session_id:        string;
+  source:            string;
+  captured_at:       string;
+  title?:            string;
+  risk_level?:       string;
+  markdown_content?: string;
+  raw_vlm_json?:     Record<string, unknown>;
 }
 
 // ── RAG ──────────────────────────────────────────────────────────────
@@ -249,6 +252,60 @@ export interface PipelineStatus {
   checked_at: string;
 }
 
+// ── Trained Model ────────────────────────────────────────────────────
+export type YoloTaskType = "detect" | "pose" | "segment" | "classify" | "obb";
+export type ModelFormat  = "e2e" | "traditional";
+
+export interface TrainedModel {
+  id:               string;
+  name:             string;
+  description?:     string;
+  task_type:        YoloTaskType;
+  model_filename:   string;
+  model_size_mb?:   number;
+  model_format:     ModelFormat;
+  output_shape?:    string;
+  input_size:       number;
+  num_classes:      number;
+  class_names?:     string[];
+  dataset_name?:    string;
+  is_active:        boolean;
+  is_builtin:       boolean;
+  source:           string;
+  base_model?:      string;
+  metrics?:         Record<string, number>;
+  notes?:           string;
+  created_at:       string;
+  updated_at:       string;
+}
+
+export interface TrainedModelListResponse {
+  total: number;
+  items: TrainedModel[];
+}
+
+export interface ActiveModelsResponse {
+  models: Record<YoloTaskType, TrainedModel>;
+}
+
+// ── Chat History ─────────────────────────────────────────────────────
+export interface ChatHistoryItem {
+  id:          string;
+  session_id?: string;
+  question:    string;
+  answer:      string;
+  sources?:    RagSource[];
+  latency_ms?: number;
+  notes?:      string;
+  created_at:  string;
+  updated_at:  string;
+}
+
+export interface ChatHistoryListResponse {
+  total: number;
+  items: ChatHistoryItem[];
+}
+
 // ── 事件中心 / Syslog ─────────────────────────────────────────────────
 export interface SysLog {
   id:          number;
@@ -270,4 +327,35 @@ export interface SysLogStats {
   by_module:           Record<string, number>;
   recent_errors_24h:   number;
   recent_warnings_24h: number;
+}
+
+// ── Factory Events ────────────────────────────────────────────────────
+export type EventSeverity = "critical" | "high" | "medium" | "low" | "info";
+export type EventType = "detection" | "hazard" | "ppe_violation" | "equipment" | "system";
+
+export interface FactoryEvent {
+  id:           string;
+  event_type:   EventType;
+  severity:     EventSeverity;
+  title:        string;
+  message:      string;
+  source:       string;
+  session_id:   string | null;
+  equipment_id: string | null;
+  location:     string | null;
+  extra:        Record<string, unknown> | null;
+  thumbnail:    string | null;
+  acknowledged: boolean;
+  resolved:     boolean;
+  resolved_at:  string | null;
+  created_at:   string;
+}
+
+export interface EventStats {
+  total:        number;
+  unresolved:   number;
+  critical_24h: number;
+  high_24h:     number;
+  by_type:      Record<string, number>;
+  by_severity:  Record<string, number>;
 }
