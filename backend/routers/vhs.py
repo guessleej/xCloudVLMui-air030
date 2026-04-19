@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -96,6 +96,69 @@ async def get_vhs_trend(
         estimated_days= days - real_days,
         data=           data,
     )
+
+
+@router.get("/readings", response_model=list[VhsReadingOut])
+async def list_vhs_readings(
+    equipment_id: str | None = None,
+    days:         int         = 30,
+    limit:        int         = 200,
+    db:           AsyncSession = Depends(get_db),
+):
+    """查詢 VHS 讀值列表，可依 equipment_id 過濾。"""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    q = select(VhsReading).where(VhsReading.recorded_at >= since)
+    if equipment_id:
+        q = q.where(VhsReading.equipment_id == equipment_id)
+    q = q.order_by(VhsReading.recorded_at.desc()).limit(limit)
+    result = await db.execute(q)
+    return result.scalars().all()
+
+
+@router.get("/readings/latest", response_model=list[VhsReadingOut])
+async def get_latest_vhs_readings(db: AsyncSession = Depends(get_db)):
+    """取得各設備最新一筆 VHS 讀值。"""
+    subq = (
+        select(VhsReading.equipment_id, func.max(VhsReading.recorded_at).label("max_ts"))
+        .group_by(VhsReading.equipment_id)
+        .subquery()
+    )
+    q = select(VhsReading).join(
+        subq,
+        (VhsReading.equipment_id == subq.c.equipment_id) &
+        (VhsReading.recorded_at  == subq.c.max_ts),
+    )
+    result = await db.execute(q)
+    return result.scalars().all()
+
+
+@router.get("/readings/stats")
+async def get_vhs_stats(
+    equipment_id: str,
+    days:         int = 30,
+    db:           AsyncSession = Depends(get_db),
+):
+    """取得指定設備 VHS 統計（avg / min / max / count）。"""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    result = await db.execute(
+        select(
+            func.avg(VhsReading.score).label("avg"),
+            func.min(VhsReading.score).label("min"),
+            func.max(VhsReading.score).label("max"),
+            func.count(VhsReading.id).label("count"),
+        ).where(
+            VhsReading.equipment_id == equipment_id,
+            VhsReading.recorded_at  >= since,
+        )
+    )
+    row = result.one()
+    return {
+        "equipment_id": equipment_id,
+        "avg":   round(row.avg, 1) if row.avg is not None else None,
+        "min":   row.min,
+        "max":   row.max,
+        "count": row.count,
+    }
 
 
 @router.post("/readings", response_model=VhsReadingOut, status_code=201)

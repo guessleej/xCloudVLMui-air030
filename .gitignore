@@ -39,6 +39,14 @@ models/*.bin
 .idea/
 *.swp
 
+# Claude Code 工作目錄快取（不應提交）
+.claude/
+
+# YOLO 模型暫存檔（根目錄，非 public/models/ 的）
+frontend/*.onnx
+frontend/*.pt
+frontend/*.bin
+
 # macOS iCloud Drive 衝突副本（自動產生的 "filename 2.ext" 格式）
 * 2.*
 * 2

@@ -1,262 +1,159 @@
 ###############################################################################
-# Makefile — xCloudVLMui Platform 操作中樞
+# Makefile — xCloudVLMui Platform [bot-air030]
+# Advantech AIR-030 · Jetson AGX Orin 64GB · JetPack 6.0 · ARM64 · CUDA 12.2
 #
 # ┌─ 首次部署 ──────────────────────────────────────────────────────────┐
-# │  make setup        # 產生 SSL + 複製 .env + 下載模型                │
-# │  make up           # 啟動所有 Docker 服務                           │
+# │  make setup        # 複製 .env，確認 GPU runtime                    │
+# │  make up           # 啟動所有 Docker 服務（含 CUDA 加速）           │
 # │  make test         # 驗證所有服務健康狀態                           │
 # └────────────────────────────────────────────────────────────────────┘
 #
-# ┌─ 日常操作 ──────────────────────────────────────────────────────────┐
-# │  make logs         # 查看所有服務即時 log                           │
-# │  make logs-llm     # 只看 llama.cpp log                            │
-# │  make restart      # 重啟所有服務                                   │
-# │  make down         # 停止並移除容器                                 │
-# │  make clean        # 完全清除（含 Volume）                          │
-# └────────────────────────────────────────────────────────────────────┘
+# Port 配置（bot-air030 專用）：
+#   nginx    → http://localhost:8880  ← 主要入口
+#   backend  → http://localhost:8001/api/health
+#   llama-cpp→ http://localhost:18080/health
+#   vlm-webui→ http://localhost:8090
+#   cadvisor → http://localhost:8091
 ###############################################################################
 
-.PHONY: all setup download-model gen-ssl env-copy build up down restart \
-        logs logs-llm logs-backend logs-frontend logs-mqtt status test ps clean \
-        shell-backend shell-llm dev update-model restart-mqtt \
-        release release-amd64 release-full
+.PHONY: all help setup check-gpu up down restart \
+        logs logs-llm logs-backend logs-frontend logs-mqtt \
+        status test ps clean clean-all
 
-COMPOSE        := docker compose
-COMPOSE_FILE   := -f docker-compose.yml
-COMPOSE_DEV    := -f docker-compose.yml -f docker-compose.dev.yml
-SCRIPTS_DIR    := scripts
-MODEL_REPO     ?= bartowski/google_gemma-4-e4b-it-GGUF
-MODEL_FILE     ?= gemma-4-e4b-it-Q4_K_M.gguf
+COMPOSE      := docker compose
+COMPOSE_FILE := -f docker-compose.yml
 
-# ── 顏色 ─────────────────────────────────────────────────────────────
 BLUE   := \033[0;34m
 GREEN  := \033[0;32m
 YELLOW := \033[1;33m
+RED    := \033[0;31m
 NC     := \033[0m
 
-# ── 預設目標 ─────────────────────────────────────────────────────────
 all: help
 
 help:
 	@echo ""
-	@printf "$(BLUE)╔══════════════════════════════════════════════════════╗$(NC)\n"
-	@printf "$(BLUE)║      xCloudVLMui Platform — AIR-030 操作指令        ║$(NC)\n"
-	@printf "$(BLUE)╚══════════════════════════════════════════════════════╝$(NC)\n"
+	@printf "$(BLUE)╔══════════════════════════════════════════════════════════╗$(NC)\n"
+	@printf "$(BLUE)║  xCloudVLMui — AIR-030 · JetPack 6.0 · ARM64 · CUDA 12.2 ║$(NC)\n"
+	@printf "$(BLUE)╠══════════════════════════════════════════════════════════╣$(NC)\n"
+	@printf "$(BLUE)║  nginx:8880  backend:8001  frontend:3100  llama:18080     ║$(NC)\n"
+	@printf "$(BLUE)╚══════════════════════════════════════════════════════════╝$(NC)\n"
 	@echo ""
 	@printf "$(YELLOW)首次部署：$(NC)\n"
-	@printf "  make setup          產生 SSL + .env + 下載 Gemma 4 E4B 模型\n"
-	@printf "  make up             啟動所有服務\n"
+	@printf "  make setup          複製 .env 並確認 NVIDIA GPU runtime\n"
+	@printf "  make up             建置並啟動所有服務（CUDA 加速）\n"
 	@printf "  make test           驗證所有服務健康狀態\n"
 	@echo ""
 	@printf "$(YELLOW)日常操作：$(NC)\n"
 	@printf "  make logs           查看所有服務 log\n"
-	@printf "  make logs-llm       只看 llama.cpp log\n"
-	@printf "  make logs-mqtt      只看 mosquitto (MQTT) log\n"
-	@printf "  make status         顯示容器狀態與資源使用\n"
-	@printf "  make ps             顯示容器列表\n"
+	@printf "  make logs-llm       只看 llama-cpp log（GPU 推論）\n"
+	@printf "  make logs-backend   只看 backend log\n"
+	@printf "  make status         顯示容器狀態\n"
+	@printf "  make check-gpu      確認 Jetson GPU / JetPack 版本\n"
 	@printf "  make restart        重啟所有服務\n"
 	@printf "  make down           停止容器\n"
-	@printf "  make clean          完全清除（含 Volume 資料）\n"
-	@echo ""
-	@printf "$(YELLOW)開發模式（本機 / 無 GPU）：$(NC)\n"
-	@printf "  make dev            啟動開發模式（程式碼熱重載）\n"
-	@echo ""
-	@printf "$(YELLOW)生產打包：$(NC)\n"
-	@printf "  make release        打包 ARM64 映像（跳過 vlm-webui，速度快）\n"
-	@printf "  make release-full   打包 ARM64 完整映像（含 vlm-webui）\n"
-	@printf "  make release-amd64  打包 amd64 映像（本機 x86 測試用）\n"
+	@printf "  make clean          停止並移除容器（保留資料）\n"
+	@printf "  make clean-all      完全清除（含 Volume 資料庫）\n"
 	@echo ""
 
 # ─────────────────────────────────────────────────────────────────────
-# 首次設定
-# ─────────────────────────────────────────────────────────────────────
-
-## 完整初始化：SSL + .env + 下載模型
-setup: gen-ssl env-copy download-model
-	@printf "$(GREEN)✓ setup 完成！執行 make up 啟動服務。$(NC)\n"
-
-## 產生自簽 TLS 憑證（WebRTC 需要）
-gen-ssl:
-	@printf "$(BLUE)► 產生 SSL 憑證...$(NC)\n"
-	@bash $(SCRIPTS_DIR)/gen-ssl.sh
-
-## 複製 .env 範本（若不存在）
-env-copy:
-	@printf "$(BLUE)► 設定環境變數...$(NC)\n"
+setup:
+	@printf "$(BLUE)► 設定 AIR-030 環境...$(NC)\n"
 	@if [ ! -f backend/.env ]; then \
 		cp backend/.env.example backend/.env ; \
-		printf "$(YELLOW)  ⚠ 已複製 backend/.env，請填入正確設定值。$(NC)\n" ; \
+		printf "$(YELLOW)  ⚠ 已複製 backend/.env，請填入 HF_TOKEN / SECRET_KEY。$(NC)\n" ; \
 	else \
 		printf "$(GREEN)  ✓ backend/.env 已存在。$(NC)\n" ; \
 	fi
 	@if [ ! -f frontend/.env.local ]; then \
 		cp frontend/.env.local.example frontend/.env.local ; \
-		printf "$(YELLOW)  ⚠ 已複製 frontend/.env.local，請填入 OAuth Client ID/Secret。$(NC)\n" ; \
+		printf "$(YELLOW)  ⚠ 已複製 frontend/.env.local，請填入 OAuth 憑證與 AIR-030 IP。$(NC)\n" ; \
 	else \
 		printf "$(GREEN)  ✓ frontend/.env.local 已存在。$(NC)\n" ; \
 	fi
+	@$(MAKE) check-gpu
+	@printf "$(GREEN)✓ setup 完成！執行 make up 啟動服務。$(NC)\n"
 
-## 下載 Gemma 4 E4B GGUF Q4_K_M 模型
-download-model:
-	@printf "$(BLUE)► 下載 Gemma 4 E4B GGUF Q4_K_M...$(NC)\n"
-	@bash $(SCRIPTS_DIR)/download-model.sh --yes
+check-gpu:
+	@printf "$(BLUE)► 確認 Jetson GPU 環境...$(NC)\n"
+	@if command -v tegrastats > /dev/null 2>&1; then \
+		printf "$(GREEN)  ✓ tegrastats 可用（JetPack 已安裝）$(NC)\n" ; \
+	else \
+		printf "$(YELLOW)  ⚠ tegrastats 未找到，確認 JetPack 6.0 安裝$(NC)\n" ; \
+	fi
+	@if docker info --format '{{.Runtimes}}' 2>/dev/null | grep -q nvidia; then \
+		printf "$(GREEN)  ✓ NVIDIA Container Runtime 已配置$(NC)\n" ; \
+	else \
+		printf "$(RED)  ✗ NVIDIA Container Runtime 未配置！$(NC)\n" ; \
+		printf "    sudo apt install nvidia-container-toolkit && sudo systemctl restart docker\n" ; \
+	fi
 
 # ─────────────────────────────────────────────────────────────────────
-# Docker 操作
-# ─────────────────────────────────────────────────────────────────────
-
-## 建置所有 Docker 映像
 build:
-	@printf "$(BLUE)► 建置 Docker 映像...$(NC)\n"
 	$(COMPOSE) $(COMPOSE_FILE) build --parallel
 
-## 啟動所有服務（含自動模型下載）
 up:
-	@printf "$(BLUE)► 啟動 xCloudVLMUI 服務...$(NC)\n"
-	$(COMPOSE) $(COMPOSE_FILE) up -d
-	@printf "$(GREEN)✓ 服務已啟動，執行 make logs 查看進度。$(NC)\n"
-	@printf "$(YELLOW)  ⚠ 首次啟動 llama.cpp 載入 128K context 約需 2-5 分鐘。$(NC)\n"
+	@printf "$(BLUE)► 啟動 AIR-030 服務（CUDA 12.2 GPU 加速）...$(NC)\n"
+	$(COMPOSE) $(COMPOSE_FILE) up -d --build
 	@echo ""
-	@printf "  Web UI：     http://localhost\n"
-	@printf "  VLM WebUI：  http://localhost:8090\n"
-	@printf "  API Docs：   http://localhost/docs\n"
-	@printf "  llama.cpp：  http://localhost:8080\n"
+	@printf "$(GREEN)✓ 服務已啟動！$(NC)\n\n"
+	@printf "  主要入口  → $(BLUE)http://localhost:8880$(NC)\n"
+	@printf "  API Docs  → $(BLUE)http://localhost:8880/docs$(NC)\n"
+	@printf "  Backend   → $(BLUE)http://localhost:8001/api/health$(NC)\n"
+	@printf "  Frontend  → $(BLUE)http://localhost:3100$(NC)\n"
+	@printf "  LLaMA.cpp → $(BLUE)http://localhost:18080/health$(NC)\n"
+	@printf "  VLM WebUI → $(BLUE)http://localhost:8090$(NC)\n"
+	@printf "  cAdvisor  → $(BLUE)http://localhost:8091$(NC)\n"
 
-## 停止服務
 down:
 	$(COMPOSE) $(COMPOSE_FILE) down
 
-## 重啟服務
 restart:
 	$(COMPOSE) $(COMPOSE_FILE) restart
 
-## 只重啟後端
-restart-backend:
-	$(COMPOSE) $(COMPOSE_FILE) restart backend
-
-## 只重啟 llama.cpp
-restart-llm:
-	$(COMPOSE) $(COMPOSE_FILE) restart llama-cpp
-
-# ─────────────────────────────────────────────────────────────────────
-# 監控
-# ─────────────────────────────────────────────────────────────────────
-
-## 查看所有服務 log（即時）
 logs:
 	$(COMPOSE) $(COMPOSE_FILE) logs -f --tail=100
 
-## 只看 llama.cpp log
 logs-llm:
 	$(COMPOSE) $(COMPOSE_FILE) logs -f --tail=100 llama-cpp
 
-## 只看 backend log
 logs-backend:
 	$(COMPOSE) $(COMPOSE_FILE) logs -f --tail=100 backend
 
-## 只看 frontend log
 logs-frontend:
 	$(COMPOSE) $(COMPOSE_FILE) logs -f --tail=100 frontend
 
-## 只看 mosquitto (MQTT) log
 logs-mqtt:
 	$(COMPOSE) $(COMPOSE_FILE) logs -f --tail=100 mosquitto
 
-## 只重啟 mosquitto
-restart-mqtt:
-	$(COMPOSE) $(COMPOSE_FILE) restart mosquitto
-
-## 顯示容器列表
 ps:
 	$(COMPOSE) $(COMPOSE_FILE) ps
 
-## 顯示容器狀態 + GPU 使用
 status:
-	@printf "$(BLUE)── 容器狀態 ──────────────────────────$(NC)\n"
+	@printf "$(BLUE)── AIR-030 容器狀態 ──────────────────$(NC)\n"
 	$(COMPOSE) $(COMPOSE_FILE) ps
-	@echo ""
-	@printf "$(BLUE)── GPU 使用率 ────────────────────────$(NC)\n"
-	@tegrastats --interval 1000 2>/dev/null | head -3 || \
-	 nvidia-smi 2>/dev/null | head -20 || \
-	 echo "  (tegrastats / nvidia-smi 不可用)"
 
-# ─────────────────────────────────────────────────────────────────────
-# 測試
-# ─────────────────────────────────────────────────────────────────────
-
-## 驗證所有服務健康狀態
 test:
-	@printf "$(BLUE)► 執行健康檢查...$(NC)\n"
-	@bash $(SCRIPTS_DIR)/test-services.sh
-
-## 快速 ping 所有端點
-ping:
+	@printf "$(BLUE)► 驗證 AIR-030 服務健康狀態...$(NC)\n"
 	@for url in \
-		"http://localhost:8080/health" \
-		"http://localhost:8000/api/health" \
-		"http://localhost:8090/" \
-		"http://localhost:3000/" \
-		"http://localhost/"; do \
-		CODE=$$(curl -sk -o /dev/null -w "%{http_code}" --max-time 3 $$url 2>/dev/null || echo "ERR") ; \
-		printf "  %-40s → %s\n" "$$url" "$$CODE" ; \
+		"http://localhost:8001/api/health" \
+		"http://localhost:18080/health" \
+		"http://localhost:8880/api/health" \
+		"http://localhost:8091/healthz"; do \
+		CODE=$$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 $$url 2>/dev/null || echo "ERR") ; \
+		if [ "$$CODE" = "200" ]; then \
+			printf "  $(GREEN)✓$(NC) %-50s → %s\n" "$$url" "$$CODE" ; \
+		else \
+			printf "  $(RED)✗$(NC) %-50s → %s\n" "$$url" "$$CODE" ; \
+		fi ; \
 	done
 
-# ─────────────────────────────────────────────────────────────────────
-# Shell 進入
-# ─────────────────────────────────────────────────────────────────────
-
-shell-backend:
-	$(COMPOSE) $(COMPOSE_FILE) exec backend /bin/bash
-
-shell-llm:
-	$(COMPOSE) $(COMPOSE_FILE) exec llama-cpp /bin/bash
-
-shell-frontend:
-	$(COMPOSE) $(COMPOSE_FILE) exec frontend /bin/sh
-
-# ─────────────────────────────────────────────────────────────────────
-# 開發模式
-# ─────────────────────────────────────────────────────────────────────
-
-## 本機開發模式（程式碼熱重載，無 GPU 需求）
-dev:
-	@printf "$(YELLOW)► 開發模式（llama.cpp 使用 CPU，不啟動 vlm-webui）$(NC)\n"
-	$(COMPOSE) $(COMPOSE_DEV) up -d --build
-
-dev-down:
-	$(COMPOSE) $(COMPOSE_DEV) down
-
-# ─────────────────────────────────────────────────────────────────────
-# 清理
-# ─────────────────────────────────────────────────────────────────────
-
-## 停止容器並移除（保留 Volume）
 clean:
 	$(COMPOSE) $(COMPOSE_FILE) down --rmi local
 	@printf "$(GREEN)✓ 容器已清除（資料 Volume 保留）。$(NC)\n"
 
-# ─────────────────────────────────────────────────────────────────────
-# 生產打包
-# ─────────────────────────────────────────────────────────────────────
-
-## 打包 Jetson ARM64 生產映像（跳過 vlm-webui，速度快）
-release:
-	@printf "$(BLUE)► 打包 ARM64 生產映像（跳過 vlm-webui）...$(NC)\n"
-	@bash $(SCRIPTS_DIR)/build-release.sh --platform linux/arm64 --skip-vlm
-
-## 打包 Jetson ARM64 完整生產映像（含 vlm-webui）
-release-full:
-	@printf "$(BLUE)► 打包 ARM64 完整生產映像（含 vlm-webui）...$(NC)\n"
-	@bash $(SCRIPTS_DIR)/build-release.sh --platform linux/arm64
-
-## 打包 x86_64 生產映像（本機測試用）
-release-amd64:
-	@printf "$(BLUE)► 打包 amd64 生產映像（本機測試）...$(NC)\n"
-	@bash $(SCRIPTS_DIR)/build-release.sh --platform linux/amd64 --skip-vlm
-
-## 完全清除（含 Volume / 資料庫 / ChromaDB）
 clean-all:
-	@printf "$(YELLOW)⚠ 這將刪除所有資料，包含資料庫與向量索引。$(NC)\n"
+	@printf "$(RED)⚠ 這將刪除 AIR-030 所有資料，包含模型與資料庫！$(NC)\n"
 	@printf "$(YELLOW)確認？(y/N) $(NC)" ; read confirm ; \
 	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
 		$(COMPOSE) $(COMPOSE_FILE) down -v --rmi local ; \
@@ -265,7 +162,8 @@ clean-all:
 		printf "已取消。\n" ; \
 	fi
 
-## 只清除模型（重新下載）
-clean-model:
-	docker volume rm xcloudvlmui_model-data 2>/dev/null || true
-	@printf "$(GREEN)✓ 模型 Volume 已清除，下次 make up 時會重新下載。$(NC)\n"
+shell-backend:
+	$(COMPOSE) $(COMPOSE_FILE) exec backend /bin/bash
+
+shell-frontend:
+	$(COMPOSE) $(COMPOSE_FILE) exec frontend /bin/sh

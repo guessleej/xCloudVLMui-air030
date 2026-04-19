@@ -135,6 +135,7 @@ class ReportOut(BaseModel):
     risk_level:       str
     source:           str
     markdown_content: Optional[str] = None
+    is_deleted:       bool          = False
     created_at:       datetime
     updated_at:       datetime
 
@@ -241,6 +242,7 @@ class SettingsUpdate(BaseModel):
 # ── Feature Flags ─────────────────────────────────────────────────────
 
 class FeatureFlagOut(BaseModel):
+    id:          str
     key:         str
     enabled:     bool
     rollout_pct: int                          = 100
@@ -249,6 +251,7 @@ class FeatureFlagOut(BaseModel):
     # 透過 validation_alias 從 ORM 讀取，序列化仍輸出為 metadata
     metadata:    Optional[dict[str, Any]]    = Field(None, validation_alias="extra_config")
     updated_at:  datetime
+    created_at:  datetime
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 

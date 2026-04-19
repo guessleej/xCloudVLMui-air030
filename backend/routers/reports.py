@@ -17,11 +17,12 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 @router.get("/", response_model=list[ReportOut])
 async def get_reports(
-    limit:  int = 50,
-    offset: int = 0,
-    db:     AsyncSession = Depends(get_db),
+    limit:        int         = 50,
+    offset:       int         = 0,
+    equipment_id: str | None  = None,
+    db:           AsyncSession = Depends(get_db),
 ):
-    reports = await list_reports(db, limit=limit, offset=offset)
+    reports = await list_reports(db, equipment_id=equipment_id, limit=limit, offset=offset)
     return [report_to_out(r) for r in reports]
 
 
@@ -65,11 +66,15 @@ async def download_report_md(
     report = await get_report(db, report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
-    safe_title = "".join(c if c.isalnum() or c in "-_" else "_" for c in (report.title or "report"))
+    raw_title = report.title or "report"
+    ascii_title = "".join(c if (c.isascii() and (c.isalnum() or c in "-_")) else "_" for c in raw_title)
+    safe_title = ascii_title.strip("_") or "report"
+    import urllib.parse
+    encoded_title = urllib.parse.quote(f"{raw_title}.md", safe="")
     return PlainTextResponse(
         content=report.markdown_content or "",
-        media_type="text/markdown",
-        headers={"Content-Disposition": f'attachment; filename="{safe_title}.md"'},
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=\"{safe_title}.md\"; filename*=UTF-8''{encoded_title}"},
     )
 
 

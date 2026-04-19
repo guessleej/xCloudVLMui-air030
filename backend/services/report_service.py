@@ -180,14 +180,17 @@ async def create_report(
 
 
 async def list_reports(
-    db:       AsyncSession,
-    user_id:  Optional[str] = None,
-    limit:    int = 50,
-    offset:   int = 0,
+    db:           AsyncSession,
+    user_id:      Optional[str] = None,
+    equipment_id: Optional[str] = None,
+    limit:        int = 50,
+    offset:       int = 0,
 ) -> list[Report]:
     q = select(Report).where(Report.is_deleted == False)
     if user_id:
         q = q.where(Report.user_id == user_id)
+    if equipment_id:
+        q = q.where(Report.equipment_id == equipment_id)
     q = q.order_by(Report.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(q)
     return list(result.scalars().all())
@@ -218,6 +221,7 @@ def report_to_out(r: Report) -> ReportOut:
         risk_level=       r.risk_level,
         source=           r.source,
         markdown_content= r.markdown_content,
+        is_deleted=       r.is_deleted,
         created_at=       r.created_at.isoformat(),
         updated_at=       r.updated_at.isoformat(),
     )
