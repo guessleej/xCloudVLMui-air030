@@ -22,6 +22,7 @@
 
 COMPOSE      := docker compose
 COMPOSE_FILE := -f docker-compose.yml
+HOST ?= localhost
 
 BLUE   := \033[0;34m
 GREEN  := \033[0;32m
@@ -134,12 +135,12 @@ status:
 	$(COMPOSE) $(COMPOSE_FILE) ps
 
 test:
-	@printf "$(BLUE)► 驗證 AIR-030 服務健康狀態...$(NC)\n"
+	@printf "$(BLUE)► 驗證 AIR-030 服務健康狀態（HOST=$(HOST)）...$(NC)\n"
 	@for url in \
-		"http://localhost:8001/api/health" \
-		"http://localhost:18080/health" \
-		"http://localhost:8880/api/health" \
-		"http://localhost:8091/healthz"; do \
+		"http://$(HOST):8000/api/health" \
+		"http://$(HOST):8080/health" \
+		"http://$(HOST)/api/health" \
+		"http://$(HOST):8091/healthz"; do \
 		CODE=$$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 $$url 2>/dev/null || echo "ERR") ; \
 		if [ "$$CODE" = "200" ]; then \
 			printf "  $(GREEN)✓$(NC) %-50s → %s\n" "$$url" "$$CODE" ; \

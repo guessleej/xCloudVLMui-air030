@@ -14,7 +14,7 @@
 #   [4] vlm-webui    — 即時視覺分析 WebUI (Port 8090, WebRTC)
 #   [5] backend      — FastAPI 中介層 (Port 8000) + /metrics Prometheus
 #   [6] frontend     — Next.js 儀表板 (Port 3000)
-#   [7] nginx        — 反向代理 (Port 80)
+#   [7] nginx        — 反向代理 (Port 80/443)
 #   [8] cadvisor     — 容器資源監控 Web UI (Port 8091)  ← 3.3 可觀測性
 ###############################################################################
 
@@ -265,7 +265,7 @@ services:
     logging: *default-logging
 
   # ──────────────────────────────────────────────────────────────────
-  # [7] nginx — 反向代理 (Port 80)
+  # [7] nginx — 反向代理 (Port 80/443)
   # ──────────────────────────────────────────────────────────────────
   nginx:
     image: nginx:1.25-alpine
@@ -273,8 +273,10 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - frontend
       - backend
