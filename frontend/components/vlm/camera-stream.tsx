@@ -69,6 +69,12 @@ type CameraPermission = "prompt" | "granted" | "denied" | "unsupported";
 type WsStatus = "disconnected" | "connecting" | "connected" | "error";
 type FacingMode = "user" | "environment";
 
+type CameraPreference = {
+  deviceId: string;
+  groupId: string;
+  label: string;
+};
+
 export interface CameraStreamProps {
   /** 每次分析完成後的回調（可用於更新外部狀態）*/
   onAnalysisComplete?: (entry: AnalysisEntry) => void;
@@ -352,6 +358,43 @@ const VIDEO_CONSTRAINTS = {
   width:  { ideal: 1280, max: 1920 },
   height: { ideal: 720,  max: 1080 },
 };
+
+function normalizeCameraLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isLikelyD435i(label: string): boolean {
+  const normalized = normalizeCameraLabel(label);
+  return /d435i|d435|realsense|intel\(r\).*depth/.test(normalized);
+}
+
+function resolveCameraDeviceId(
+  devices: MediaDeviceInfo[],
+  requestedDeviceId?: string,
+  preference?: CameraPreference | null,
+): string | null | undefined {
+  if (!requestedDeviceId) return undefined;
+  if (devices.some((device) => device.deviceId === requestedDeviceId)) return requestedDeviceId;
+  if (!preference) return null;
+
+  const sameGroup = devices.find(
+    (device) => preference.groupId && device.groupId === preference.groupId,
+  );
+  if (sameGroup) return sameGroup.deviceId;
+
+  const preferredLabel = normalizeCameraLabel(preference.label);
+  const sameLabel = devices.find(
+    (device) => device.label && normalizeCameraLabel(device.label) === preferredLabel,
+  );
+  if (sameLabel) return sameLabel.deviceId;
+
+  if (isLikelyD435i(preference.label)) {
+    const d435i = devices.find((device) => isLikelyD435i(device.label));
+    if (d435i) return d435i.deviceId;
+  }
+
+  return null;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    工具函式
@@ -1053,11 +1096,16 @@ export default function CameraStream({
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);   // VLM 分析框（z-20）
   const yoloCanvasRef    = useRef<HTMLCanvasElement>(null);   // YOLO 即時框（z-10）
   const streamRef        = useRef<MediaStream | null>(null);
+  const cameraRequestSeqRef = useRef(0);
+  const preferredCameraRef  = useRef<CameraPreference | null>(null);
 
   const [isCameraOn,        setIsCameraOn]        = useState(false);
+  const [isCameraSwitching, setIsCameraSwitching] = useState(false);
   const [permission,        setPermission]        = useState<CameraPermission>("prompt");
   const [cameras,           setCameras]           = useState<MediaDeviceInfo[]>([]);
   const [activeDeviceId,    setActiveDeviceId]    = useState("");
+  const [pendingDeviceId,   setPendingDeviceId]   = useState("");
+  const [cameraStatusText,  setCameraStatusText]  = useState("");
   const [facingMode,        setFacingMode]        = useState<FacingMode>("environment");
   const [hasMultipleCams,   setHasMultipleCams]   = useState(false);
   const [videoSize,         setVideoSize]         = useState({ w: 0, h: 0 });
@@ -1227,24 +1275,82 @@ export default function CameraStream({
      攝影機函式
   ───────────────────────────────────────────────────────────────────── */
 
-  const stopCamera = useCallback(() => {
+  const refreshCameras = useCallback(async (): Promise<MediaDeviceInfo[]> => {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
+      return [];
+    }
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevs = devices.filter((d) => d.kind === "videoinput");
+    setCameras(videoDevs);
+    setHasMultipleCams(videoDevs.length > 1);
+    return videoDevs;
+  }, []);
+
+  const releaseCameraStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
-    if (videoRef.current) videoRef.current.srcObject = null;
-    setIsCameraOn(false);
+    if (videoRef.current) {
+      videoRef.current.onloadedmetadata = null;
+      videoRef.current.srcObject = null;
+    }
+    overlayCanvasRef.current?.getContext("2d")?.clearRect(
+      0, 0,
+      overlayCanvasRef.current.width,
+      overlayCanvasRef.current.height,
+    );
+    yoloCanvasRef.current?.getContext("2d")?.clearRect(
+      0, 0,
+      yoloCanvasRef.current.width,
+      yoloCanvasRef.current.height,
+    );
     setVideoSize({ w: 0, h: 0 });
   }, []);
 
+  const stopCamera = useCallback(() => {
+    cameraRequestSeqRef.current += 1;
+    releaseCameraStream();
+    setIsCameraOn(false);
+    setIsCameraSwitching(false);
+    setPendingDeviceId("");
+    setCameraStatusText("");
+  }, [releaseCameraStream]);
+
   const startCamera = useCallback(
     async (deviceId?: string, facing?: FacingMode) => {
-      stopCamera();
+      const requestId = cameraRequestSeqRef.current + 1;
+      cameraRequestSeqRef.current = requestId;
+      setIsCameraSwitching(true);
+      setPendingDeviceId(deviceId ?? "");
+      setCameraStatusText(deviceId ? "正在切換攝影機…" : "正在啟動攝影機…");
+      releaseCameraStream();
 
       // 桌面瀏覽器（非行動裝置）：不指定 facingMode 以避免優先選到 iPhone Continuity Camera
       // 行動裝置：使用 facingMode 選擇前/後鏡頭
       const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
       let videoConstraints: MediaTrackConstraints;
-      if (deviceId) {
-        videoConstraints = { deviceId: { exact: deviceId }, ...VIDEO_CONSTRAINTS };
+      let knownDevices: MediaDeviceInfo[] = [];
+      try {
+        knownDevices = await refreshCameras();
+      } catch {
+        knownDevices = [];
+      }
+      const resolvedDeviceId = resolveCameraDeviceId(
+        knownDevices,
+        deviceId,
+        preferredCameraRef.current,
+      );
+
+      if (deviceId && resolvedDeviceId === null) {
+        setIsCameraOn(false);
+        setIsCameraSwitching(false);
+        setPendingDeviceId("");
+        setCameraStatusText("");
+        toast.error("找不到指定攝影機，請確認 D435i 已連接或重新插拔。");
+        return;
+      }
+
+      if (resolvedDeviceId) {
+        videoConstraints = { deviceId: { exact: resolvedDeviceId }, ...VIDEO_CONSTRAINTS };
       } else if (isMobile) {
         videoConstraints = { facingMode: facing ?? "environment", ...VIDEO_CONSTRAINTS };
       } else {
@@ -1255,44 +1361,103 @@ export default function CameraStream({
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+        if (requestId !== cameraRequestSeqRef.current) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         streamRef.current = stream;
         const vid = videoRef.current!;
         vid.srcObject = stream;
-        vid.onloadedmetadata = () => {
-          vid.play().catch(() => {});
-          setVideoSize({ w: vid.videoWidth, h: vid.videoHeight });
-        };
-        const trackSettings = stream.getVideoTracks()[0]?.getSettings();
-        if (trackSettings?.deviceId) setActiveDeviceId(trackSettings.deviceId);
+        await new Promise<void>((resolve) => {
+          let resolved = false;
+          const finish = () => {
+            if (resolved) return;
+            resolved = true;
+            clearTimeout(timer);
+            resolve();
+          };
+          const timer = setTimeout(finish, 2500);
+          vid.onloadedmetadata = finish;
+          if (vid.readyState >= HTMLMediaElement.HAVE_METADATA) finish();
+        });
+        if (requestId !== cameraRequestSeqRef.current) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        await vid.play().catch(() => {});
+        setVideoSize({ w: vid.videoWidth, h: vid.videoHeight });
+
+        const videoTrack = stream.getVideoTracks()[0];
+        const trackSettings = videoTrack?.getSettings();
+        if (trackSettings?.deviceId) {
+          setActiveDeviceId(trackSettings.deviceId);
+          const matched = (await refreshCameras()).find((device) => device.deviceId === trackSettings.deviceId);
+          preferredCameraRef.current = {
+            deviceId: trackSettings.deviceId,
+            groupId: matched?.groupId ?? "",
+            label: videoTrack?.label || matched?.label || "",
+          };
+        }
+        if (videoTrack) {
+          videoTrack.onended = () => {
+            if (requestId !== cameraRequestSeqRef.current) return;
+            releaseCameraStream();
+            setIsCameraOn(false);
+            setIsCameraSwitching(false);
+            setPendingDeviceId("");
+            setCameraStatusText("");
+            void refreshCameras();
+            toast.error("攝影機訊號中斷，請確認 D435i 是否被拔除。");
+          };
+        }
         setIsCameraOn(true);
+        setIsCameraSwitching(false);
+        setPendingDeviceId("");
+        setCameraStatusText("");
         setPermission("granted");
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevs = devices.filter((d) => d.kind === "videoinput");
-        setCameras(videoDevs);
-        setHasMultipleCams(videoDevs.length > 1);
       } catch (err: any) {
+        if (requestId !== cameraRequestSeqRef.current) return;
         if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
           setPermission("denied");
           toast.error("攝影機權限被拒絕，請在瀏覽器設定中允許攝影機存取。");
         } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
           toast.error("找不到攝影機裝置，請確認攝影機已連接。");
+        } else if (err.name === "OverconstrainedError" && deviceId) {
+          await refreshCameras();
+          toast.error("指定攝影機目前不可用，請重新插拔或選擇其他攝影機。");
         } else if (err.name === "OverconstrainedError") {
           try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            if (requestId !== cameraRequestSeqRef.current) {
+              stream.getTracks().forEach((track) => track.stop());
+              return;
+            }
             streamRef.current = stream;
             videoRef.current!.srcObject = stream;
             await videoRef.current!.play().catch(() => {});
+            const trackSettings = stream.getVideoTracks()[0]?.getSettings();
+            if (trackSettings?.deviceId) setActiveDeviceId(trackSettings.deviceId);
             setIsCameraOn(true);
+            setIsCameraSwitching(false);
+            setPendingDeviceId("");
+            setCameraStatusText("");
             setPermission("granted");
+            await refreshCameras();
+            return;
           } catch {
             toast.error("無法啟動攝影機，請嘗試重新整理頁面。");
           }
         } else {
           toast.error(`攝影機啟動失敗：${err.message}`);
         }
+        releaseCameraStream();
+        setIsCameraOn(false);
+        setIsCameraSwitching(false);
+        setPendingDeviceId("");
+        setCameraStatusText("");
       }
     },
-    [stopCamera]
+    [refreshCameras, releaseCameraStream]
   );
 
   const switchCamera = useCallback(async () => {
@@ -1303,10 +1468,17 @@ export default function CameraStream({
 
   const selectCamera = useCallback(
     async (deviceId: string) => {
-      setActiveDeviceId(deviceId);
+      const selected = cameras.find((cam) => cam.deviceId === deviceId);
+      preferredCameraRef.current = {
+        deviceId,
+        groupId: selected?.groupId ?? "",
+        label: selected?.label ?? "",
+      };
+      setPendingDeviceId(deviceId);
       if (isCameraOn) await startCamera(deviceId);
+      else setActiveDeviceId(deviceId);
     },
-    [isCameraOn, startCamera]
+    [cameras, isCameraOn, startCamera]
   );
 
   /* ─────────────────────────────────────────────────────────────────────
@@ -1720,7 +1892,15 @@ export default function CameraStream({
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setPermission("unsupported");
     }
+    void refreshCameras();
+
+    const handleDeviceChange = () => {
+      void refreshCameras();
+    };
+    navigator.mediaDevices?.addEventListener?.("devicechange", handleDeviceChange);
+
     return () => {
+      navigator.mediaDevices?.removeEventListener?.("devicechange", handleDeviceChange);
       wantWsRef.current = false;
       wsRef.current?.close();
       if (wsReconnectRef.current) clearTimeout(wsReconnectRef.current);
@@ -1729,14 +1909,13 @@ export default function CameraStream({
       if (yoloRafRef.current) cancelAnimationFrame(yoloRafRef.current);
       stopCamera();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refreshCameras, stopCamera]);
 
   /* ─────────────────────────────────────────────────────────────────────
      Derived state
   ───────────────────────────────────────────────────────────────────── */
 
-  const canAnalyze    = isCameraOn && !isAnalyzing;
+  const canAnalyze    = isCameraOn && !isAnalyzing && !isCameraSwitching;
   // AUTO 統一全模式：固定使用 auto，不再允許切換至單一模式
   const isPeopleMode  = false;           // 已整合進 AUTO（pose 在 auto 中並行執行）
   const isAutoMode    = true;            // 永遠是 AUTO 模式
@@ -2096,13 +2275,22 @@ export default function CameraStream({
         })()}
 
         {/* 未開啟攝影機時的佔位畫面 */}
-        {!isCameraOn && (
+        {!isCameraOn && !isCameraSwitching && (
           <div className="absolute inset-0 flex items-center justify-center">
             {permission === "unsupported" && <UnsupportedBrowser />}
             {permission === "denied"      && <PermissionDenied />}
             {(permission === "prompt" || permission === "granted") && (
               <PermissionBlocker onRequest={() => startCamera(undefined, facingMode)} />
             )}
+          </div>
+        )}
+
+        {isCameraSwitching && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm">
+            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/85 px-4 py-3 text-sm text-slate-200 shadow-2xl">
+              <Loader2 className="h-4 w-4 animate-spin text-brand-300" />
+              <span>{cameraStatusText || "正在同步攝影機畫面…"}</span>
+            </div>
           </div>
         )}
 
@@ -2116,8 +2304,9 @@ export default function CameraStream({
             <div className="flex items-center gap-2">
               {cameras.length > 1 && (
                 <select
-                  value={activeDeviceId}
+                  value={pendingDeviceId || activeDeviceId}
                   onChange={(e) => selectCamera(e.target.value)}
+                  disabled={isAnalyzing || isCameraSwitching}
                   className="hidden max-w-[160px] rounded-xl border border-white/10 bg-slate-900/90 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-brand-500/50 sm:block"
                 >
                   {cameras.map((cam, i) => (
@@ -2130,7 +2319,7 @@ export default function CameraStream({
               {hasMultipleCams && (
                 <button
                   onClick={switchCamera}
-                  disabled={isAnalyzing}
+                  disabled={isAnalyzing || isCameraSwitching}
                   title={facingMode === "environment" ? "切換為前鏡頭" : "切換為後鏡頭"}
                   className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-slate-900/80 text-slate-300 transition-colors hover:bg-white/10 disabled:opacity-40 sm:hidden"
                 >
@@ -2426,8 +2615,9 @@ export default function CameraStream({
               <div>
                 <label className="mb-1.5 block text-[11px] text-slate-400">攝影機裝置</label>
                 <select
-                  value={activeDeviceId}
+                  value={pendingDeviceId || activeDeviceId}
                   onChange={(e) => selectCamera(e.target.value)}
+                  disabled={isAnalyzing || isCameraSwitching}
                   className="w-full rounded-[14px] border border-white/10 bg-slate-950/50 px-3 py-2 text-xs text-slate-200 outline-none"
                 >
                   {cameras.map((cam, i) => (

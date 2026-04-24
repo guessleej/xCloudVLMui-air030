@@ -114,6 +114,12 @@ async def lifespan(app: FastAPI):
     background_tasks.append(t)
     logger.info("Syslog cleanup task started (retention=90d, interval=24h).")
 
+    if settings.hls_monitor_enabled:
+        from services.hls_monitor_service import hls_monitor_loop
+        t = asyncio.create_task(hls_monitor_loop(), name="hls-monitor")
+        background_tasks.append(t)
+        logger.info("HLS monitor task started: %s", settings.hls_monitor_url)
+
     yield
 
     # ── 背景任務關閉 ─────────────────────────────────────────────────
