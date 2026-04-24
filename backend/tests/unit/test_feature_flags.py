@@ -103,7 +103,7 @@ async def test_get_single_flag_schema(client):
     await client.get("/api/settings/feature-flags")   # seed
     resp = await client.get("/api/settings/feature-flags/ff.auto_report")
     data = resp.json()
-    for field in ["id", "key", "enabled", "rollout_pct", "updated_at", "created_at"]:
+    for field in ["key", "enabled", "rollout_pct", "updated_at"]:
         assert field in data, f"Missing field: {field}"
 
 

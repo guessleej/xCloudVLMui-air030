@@ -1,0 +1,10 @@
+logLevel: info
+
+rtspAddress: :8554
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsVariant: mpegts
+
+paths:
+  d435i:
+    source: publisher
