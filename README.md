@@ -1,49 +1,49 @@
-<!-- xCloudVLMui — AIR-030 README -->
+<!-- xCloudVLMui — DGX Spark (HP ZGX Nano G1n) README -->
 <div align="center">
 
-# xCloudVLMui Platform — AIR-030
+# xCloudVLMui Platform — DGX Spark
 
 **工廠設備健康管理平台 · 工廠視覺 AI 指揮台**
 
-[![Platform](https://img.shields.io/badge/Platform-Advantech%20AIR--030-orange)]()
-[![SoM](https://img.shields.io/badge/SoM-Jetson%20AGX%20Orin-76b900?logo=nvidia&logoColor=white)]()
-[![CUDA](https://img.shields.io/badge/CUDA-11.4%20Ampere-76b900?logo=nvidia&logoColor=white)]()
-[![AI](https://img.shields.io/badge/AI-275%20TOPS%20INT8-ff6600)]()
-[![RAM](https://img.shields.io/badge/RAM-64GB%20LPDDR5-blue)]()
+[![Platform](https://img.shields.io/badge/Platform-HP%20ZGX%20Nano%20G1n-0096d6?logo=hp&logoColor=white)]()
+[![SoC](https://img.shields.io/badge/SoC-GB10%20Grace%20Blackwell-76b900?logo=nvidia&logoColor=white)]()
+[![CUDA](https://img.shields.io/badge/CUDA-13.0%20Blackwell-76b900?logo=nvidia&logoColor=white)]()
+[![AI](https://img.shields.io/badge/AI-1%20PFLOP%20FP4-ff6600)]()
+[![RAM](https://img.shields.io/badge/RAM-128GB%20LPDDR5X-blue)]()
 [![Python](https://img.shields.io/badge/Python-3.11-3776ab?logo=python&logoColor=white)]()
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688?logo=fastapi&logoColor=white)]()
 [![Next.js](https://img.shields.io/badge/Next.js-14-000000?logo=nextdotjs&logoColor=white)]()
 [![Docker](https://img.shields.io/badge/Docker-Compose%20v2-2496ED?logo=docker&logoColor=white)]()
 
 > 由 **云碩科技 xCloudinfo Corp.Limited** 開發
-> 專為 **Advantech AIR-030 / NVIDIA Jetson AGX Orin (64GB)** 優化的邊緣 AI 部署版本
+> 專為 **HP ZGX Nano G1n AI Station / NVIDIA DGX Spark (GB10)** 優化的邊緣 AI 部署版本
 
 </div>
 
 ---
 
-## 硬體規格 — Advantech AIR-030
+## 硬體規格 — HP ZGX Nano G1n AI Station
 
 | 項目 | 規格 |
 |------|------|
-| **硬體平台** | Advantech AIR-030 Edge AI Computer |
-| **SoM** | NVIDIA Jetson AGX Orin（64GB 版）|
-| **CPU** | 12-core NVIDIA Arm Cortex-A78AE v8.2 64-bit |
-| **GPU** | NVIDIA Ampere — 2,048 CUDA Cores + 64 Tensor Cores |
-| **AI 效能** | **275 Sparse TOPS（INT8）**|
-| **記憶體** | **64 GB 256-bit LPDDR5**（CPU + GPU 共享）68.7 GB/s |
-| **儲存** | 64GB eMMC 5.1 + NVMe SSD 擴充槽 |
-| **作業系統** | Ubuntu 20.04 LTS（L4T R35.x）|
-| **JetPack** | 5.1 |
-| **CUDA** | 11.4 |
-| **TensorRT** | 8.5 |
-| **cuDNN** | 8.6 |
-| **網路** | 3× 2.5GbE（Intel I225-LM）|
-| **USB** | USB 3.2 Gen2 |
-| **功耗** | 15–60 W（可調整功耗模式）|
+| **硬體平台** | HP ZGX Nano G1n AI Station（NVIDIA DGX Spark OEM）|
+| **SoC** | NVIDIA GB10 Grace Blackwell Superchip |
+| **CPU** | 20-core Arm（10× Cortex-X925 效能核心 + 10× Cortex-A725 效率核心）|
+| **GPU** | NVIDIA Blackwell — 48 SMs，第 5 代 Tensor Cores，第 4 代 RT Cores |
+| **AI 效能** | **1 PFLOP FP4**（含 sparsity）|
+| **記憶體** | **128 GB LPDDR5X Unified Memory**（CPU + GPU 共享）273 GB/s，16 通道 |
+| **儲存** | 2 TB / 4 TB NVMe M.2 SED（PCIe Gen5 x4 插槽）|
+| **作業系統** | NVIDIA DGX OS 7.4.0（Ubuntu 24.04 base，Kernel 6.17）|
+| **CUDA** | 13.0.2 |
+| **GPU Driver** | 580.142 |
+| **網路** | ConnectX-7 200GbE（2× QSFP）+ 10GbE RJ-45 + Wi-Fi 7 + BT 5.4 |
+| **USB** | 3× USB-C 20Gbps（含 DisplayPort 1.4a Alt Mode）|
+| **顯示** | 1× HDMI 2.1a |
+| **功耗** | 待機 36-38 W / 滿載 228 W / PSU 240 W |
+| **尺寸** | 150 × 150 × 51 mm，1.25 kg |
 
-> Advantech AIR-030 搭載 NVIDIA Jetson AGX Orin 64GB，
-> 是高效能、低功耗的工業級邊緣 AI 推論系統。
+> HP ZGX Nano G1n 是 NVIDIA DGX Spark (GB10) 的 HP OEM 版本。
+> GB10 Grace Blackwell Superchip 支援最高 200B 參數模型；雙機互聯可擴充至 405B 參數。
 
 ---
 
@@ -51,7 +51,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                  AIR-030 / Jetson AGX Orin 64GB                  │
+│              HP ZGX Nano G1n / DGX Spark (GB10)                  │
 │                                                                  │
 │  ┌─ [7] nginx :8780 ──────────────────────────────────────────┐  │
 │  │                                                            │  │
@@ -65,8 +65,8 @@
 │  └────────────────────────────────────────────────────────────┘  │
 │                                                                  │
 │  ┌─ [3] llama-cpp :18180 ─────────────────────────────────────┐  │
-│  │  Gemma 4 E4B Q4_K_M · CUDA 11.4 · Ampere GPU              │  │
-│  │  n-gpu-layers=99 · ctx=32K · mlock                         │  │
+│  │  Gemma 4 E4B Q4_K_M · CUDA 13 · Blackwell GB10 GPU        │  │
+│  │  n-gpu-layers=99 · flash-attn · ctx=128K · mlock           │  │
 │  └────────────────────────────────────────────────────────────┘  │
 │                                                                  │
 │  ┌─ [4] vlm-webui :8190 ──┐  ┌─ [2] mosquitto :1884 ─────────┐  │
@@ -74,7 +74,7 @@
 │  └────────────────────────┘  └───────────────────────────────┘  │
 │                                                                  │
 │  ┌─ [8] cadvisor :8191 ───────────────────────────────────────┐  │
-│  │  Ampere GPU + 容器資源監控                                  │  │
+│  │  GB10 GPU + 容器資源監控                                    │  │
 │  └────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -85,7 +85,7 @@
 | nginx（HTTPS）| 8743 | 443 | SSL 入口 |
 | backend API | 8101 | 8000 | FastAPI + RAG + MQTT |
 | frontend | 3200 | 3000 | Next.js 儀表板 |
-| llama-cpp | 18180 | 8080 | Ampere CUDA 推論 |
+| llama-cpp | 18180 | 8080 | Blackwell CUDA 推論 |
 | vlm-webui | 8190 | 8090 | WebRTC 視覺串流 |
 | cadvisor | 8191 | 8080 | 容器資源監控 |
 | MQTT TCP | 1884 | 1883 | Eclipse Mosquitto |
@@ -98,30 +98,29 @@
 ### 前置條件
 
 ```bash
-# 1. 確認 JetPack / L4T 版本
-cat /etc/nv_tegra_release
-# 預期：# R35 (release) — JetPack 5.1
+# 1. 確認 DGX OS 版本
+cat /etc/dgx-release
+# 預期：DGX_OS_VERSION=7.4.0
 
 # 2. 確認 CUDA 版本
 nvcc --version
-# 預期：CUDA 11.4
+# 預期：CUDA 13.0
 
-# 3. 安裝 NVIDIA Container Toolkit
-sudo apt-get install -y nvidia-container-toolkit
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
+# 3. 確認 Docker + NVIDIA runtime
+docker info | grep -i runtime
+# 應包含：nvidia
 
-# 4. 設定最高效能模式（建議）
-sudo nvpmodel -m 0     # MAXN 模式
-sudo jetson_clocks     # 固定最高時脈
+# 4. 確認 nvidia-smi
+nvidia-smi
+# 應顯示：GB10 GPU, 128GB 統一記憶體
 ```
 
 ### 部署步驟
 
 ```bash
 # 1. Clone 專案
-git clone https://github.com/guessleej/xCloudVLMui-air030.git
-cd xCloudVLMui-air030
+git clone https://github.com/guessleej/xCloudVLMui-dgx-spark.git
+cd xCloudVLMui-dgx-spark
 
 # 2. 設定環境
 make setup
@@ -142,31 +141,32 @@ make test
 
 | 介面 | URL |
 |------|-----|
-| 主要 Web UI | `http://<AIR030_IP>:8780` |
-| API 文件 | `http://<AIR030_IP>:8780/docs` |
-| LLaMA.cpp | `http://<AIR030_IP>:18180/health` |
-| cAdvisor | `http://<AIR030_IP>:8191` |
+| 主要 Web UI | `http://<DGX_IP>:8780` |
+| API 文件 | `http://<DGX_IP>:8780/docs` |
+| LLaMA.cpp | `http://<DGX_IP>:18180/health` |
+| cAdvisor | `http://<DGX_IP>:8191` |
 
 ---
 
-## Ampere GPU 推論設定
+## GB10 Blackwell 推論設定
 
 ```yaml
 # docker-compose.yml llama-cpp 關鍵參數
---n-gpu-layers 99    # 全部 Layer 上 GPU
---ctx-size 32768     # 32K context（64GB 記憶體配置）
---threads 12         # Cortex-A78AE × 12 核全部使用
---mlock              # 鎖定記憶體，零 swap
+--n-gpu-layers 99    # 全部 Layer 上 GPU（128GB 足夠）
+--flash-attn         # Blackwell 第 5 代 Tensor Core FlashAttention
+--ctx-size 131072    # 128K context window
+--threads 20         # GB10 × 20 核全部使用
+--mlock              # 鎖定 128GB unified memory，零 swap
 ```
 
 ### 效能參考
 
 | 項目 | 數值 |
 |------|------|
-| AI 算力 | 275 TOPS INT8 |
-| 記憶體頻寬 | 68.7 GB/s |
-| Context Window | 32K tokens |
-| 功耗 | 15–60 W（可調）|
+| AI 算力 | 1 PFLOP FP4 |
+| 記憶體頻寬 | 273 GB/s |
+| Context Window | 128K tokens |
+| 最大支援模型 | ~200B 參數（單機）|
 
 ---
 
@@ -175,23 +175,9 @@ make test
 | 模型 | 量化 | 大小 | 用途 |
 |------|------|------|------|
 | Gemma 4 E4B Q4_K_M | GGUF | ~4GB | LLM 問答 + VLM 推論 |
+| Gemma 4 E4B Q6_K | GGUF | ~6GB | 高精度選項 |
 | YOLO11n detect (E2E) | ONNX | ~6MB | 設備巡檢 |
 | YOLO11n pose (E2E) | ONNX | ~7MB | 人員辨識 |
-
----
-
-## Jetson 效能監控
-
-```bash
-# 即時 GPU/CPU/記憶體監控
-sudo tegrastats
-
-# 查看效能模式
-sudo nvpmodel -q
-
-# 設定 MAXN 最高效能模式
-sudo nvpmodel -m 0 && sudo jetson_clocks
-```
 
 ---
 
@@ -199,16 +185,15 @@ sudo nvpmodel -m 0 && sudo jetson_clocks
 
 ### NVIDIA Container Runtime 未配置
 ```bash
-sudo apt-get install -y nvidia-container-toolkit
+# DGX OS 通常已預裝，若未配置：
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 ```
 
-### JetPack 5.1 Python 版本
+### 200GbE ConnectX-7 網路設定
 ```bash
-# JetPack 5.1 預設 Python 3.8，建議升級
-sudo add-apt-repository ppa:deadsnakes/ppa
-sudo apt-get install -y python3.11 python3.11-venv
+# 確認 ConnectX-7 網路介面
+ip link show | grep -E "enp|mlx"
 ```
 
 ---
@@ -217,14 +202,14 @@ sudo apt-get install -y python3.11 python3.11-venv
 
 | 平台 | 倉庫 | Port | 架構 | 推論加速 |
 |------|------|------|------|----------|
-| DGX Spark | [xCloudVLMui-dgx-spark](https://github.com/guessleej/xCloudVLMui-dgx-spark) | :8780 | ARM64 | GB10 CUDA 13 / DGX OS 7.4 |
+| **DGX Spark** | **[xCloudVLMui-dgx-spark](https://github.com/guessleej/xCloudVLMui-dgx-spark)** | **:8780** | **ARM64** | **GB10 CUDA 13 / DGX OS 7.4** |
 | MIC-743 | [xCloudVLMui-mic743](https://github.com/guessleej/xCloudVLMui-mic743) | :8780 | ARM64 | Blackwell CUDA 12.6 / JetPack 7.x |
-| **AIR-030** | **[xCloudVLMui-air030](https://github.com/guessleej/xCloudVLMui-air030)** | **:8780** | **ARM64** | **Ampere CUDA 11.4 / JetPack 5.1** |
+| AIR-030 | [xCloudVLMui-air030](https://github.com/guessleej/xCloudVLMui-air030) | :8780 | ARM64 | Ampere CUDA 11.4 / JetPack 5.1 |
 | x86 | [xCloudVLMui-x86](https://github.com/guessleej/xCloudVLMui-x86) | :8680 | AMD64 | CPU / 可選 NVIDIA GPU |
 | macOS | [xCloudVLMui-macOS](https://github.com/guessleej/xCloudVLMui-macOS) | :8880 | ARM64 | Ollama on Apple Silicon |
 
 ---
 
 <div align="center">
-由 <strong>云碩科技 xCloudinfo Corp.Limited</strong> 開發 · Powered by NVIDIA Jetson AGX Orin 64GB (Ampere · JetPack 5.1)
+由 <strong>云碩科技 xCloudinfo Corp.Limited</strong> 開發 · Powered by HP ZGX Nano G1n / NVIDIA GB10 Grace Blackwell
 </div>
