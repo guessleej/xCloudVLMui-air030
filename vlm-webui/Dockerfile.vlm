@@ -7,22 +7,11 @@ FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 系統依賴
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 python3-pip python3-dev \
-    git curl libssl-dev \
-    # WebRTC / aiortc 依賴
-    libavformat-dev libavcodec-dev libavdevice-dev \
-    libavutil-dev libswscale-dev libswresample-dev \
-    # V4L2 (USB 鏡頭)
-    v4l-utils \
-    # RealSense D455 SDK
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends     curl git     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Clone live-vlm-webui
-RUN git clone --depth=1 https://github.com/nvidia-ai-iot/live-vlm-webui.git .
+RUN pip3 install --no-cache-dir     aiohttp     aiohttp-cors     aiortc     av     numpy     Pillow     requests
 
 # Python 依賴（從專案 requirements.txt 安裝）
 RUN pip3 install --no-cache-dir -r requirements.txt && \

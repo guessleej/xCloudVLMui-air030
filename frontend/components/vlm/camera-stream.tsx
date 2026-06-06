@@ -131,7 +131,9 @@ const RECOGNITION_MODES: RecognitionMode[] = [
     labelEn: "Equipment",
     icon:    <Zap className="h-3.5 w-3.5" />,
     color:   "brand",
-    prompt: `你是資深工業設備診斷工程師，專精機械、電氣、液壓、氣壓與熱力系統故障分析。請對影像中所有設備元件執行完整健康評估。
+    prompt: `⚠️ 所有輸出必須使用繁體中文（台灣），嚴禁出現簡體字或任何英文敘述。
+
+你是資深工業設備診斷工程師，專精機械、電氣、液壓、氣壓與熱力系統故障分析。請對影像中所有設備元件執行完整健康評估。
 
 【偵測清單】每個設備元件或異常徵兆各佔一行（必須先輸出此區塊）：
 DETECT: [元件名稱/異常描述] | POS: [left/center/right] | VERT: [top/middle/bottom] | STATUS: [ok/warning/critical] | CONF: [high/medium/low] | TYPE: [mechanical/electrical/thermal/structural/fluid/corrosion/wear]
@@ -167,7 +169,9 @@ VHS 評分參考：90–100=優良無異常 / 70–89=輕度老化 / 50–69=中
     labelEn: "People",
     icon:    <Users className="h-3.5 w-3.5" />,
     color:   "emerald",
-    prompt: `你是資深工業安全衛生工程師（ISO 45001 / OSHA 標準），請對影像進行全面工安合規評估。
+    prompt: `⚠️ 所有輸出必須使用繁體中文（台灣），嚴禁出現簡體字或任何英文敘述。
+
+你是資深工業安全衛生工程師（ISO 45001 / OSHA 標準），請對影像進行全面工安合規評估。
 
 【人員偵測】每位人員各佔一行（必須先輸出此區塊）：
 DETECT: [人員ID/特徵描述] | POS: [left/center/right] | VERT: [top/middle/bottom] | STATUS: [ok/warning/critical] | CONF: [high/medium/low] | PPE: [compliant/partial/violation] | POSTURE: [normal/ergonomic-risk/danger]
@@ -208,7 +212,9 @@ ZONE：general=一般作業區 / restricted=限制區（需特定PPE） / permit
     labelEn: "Events",
     icon:    <ZoomIn className="h-3.5 w-3.5" />,
     color:   "amber",
-    prompt: `你是資深工廠事件分析師與緊急應變專家，專精異常事件快速識別、風險評估與應變分級。請分析影像中所有正在發生或即將發生的事件。
+    prompt: `⚠️ 所有輸出必須使用繁體中文（台灣），嚴禁出現簡體字或任何英文敘述。
+
+你是資深工廠事件分析師與緊急應變專家，專精異常事件快速識別、風險評估與應變分級。請分析影像中所有正在發生或即將發生的事件。
 
 【事件偵測清單】每個事件各佔一行（必須先輸出此區塊）：
 DETECT: [事件名稱/描述] | POS: [left/center/right] | VERT: [top/middle/bottom] | STATUS: [ok/warning/critical/emergency] | CONF: [high/medium/low] | CATEGORY: [near-miss/hazard/emergency/violation/abnormal/normal] | URGENCY: [immediate/urgent/monitor/none]
@@ -249,7 +255,9 @@ RISK_MATRIX: 發生可能性=[很低/低/中/高/很高] | 影響嚴重度=[輕�
     labelEn: "Objects",
     icon:    <Package className="h-3.5 w-3.5" />,
     color:   "violet",
-    prompt: `你是資深工廠物料管理與品質工程師，熟悉 5S 管理、FIFO/FEFO、危險物品存放法規（CNS/OSHA/GHS）。請對影像中所有可見物品進行完整盤點與合規評估。
+    prompt: `⚠️ 所有輸出必須使用繁體中文（台灣），嚴禁出現簡體字或任何英文敘述。
+
+你是資深工廠物料管理與品質工程師，熟悉 5S 管理、FIFO/FEFO、危險物品存放法規（CNS/OSHA/GHS）。請對影像中所有可見物品進行完整盤點與合規評估。
 
 【物品偵測清單】每個物品各佔一行（必須先輸出此區塊）：
 DETECT: [物品名稱/規格描述] | POS: [left/center/right] | VERT: [top/middle/bottom] | STATUS: [ok/warning/critical] | CONF: [high/medium/low] | CLASS: [raw-material/wip/finished/tool/consumable/hazmat/waste/equipment/unknown] | COMPLIANCE: [compliant/non-compliant/unknown]
@@ -297,7 +305,9 @@ COMPLIANCE 存放合規評估：
     labelEn: "AUTO",
     icon:    <Cpu className="h-3.5 w-3.5" />,
     color:   "rose",
-    prompt: `你是資深工廠視覺 AI 分析師，同時具備以下四項專業能力：
+    prompt: `⚠️ 所有輸出必須使用繁體中文（台灣），嚴禁出現簡體字或任何英文敘述（格式欄位值如 left/ok/high 除外）。嚴禁輸出思考過程、前言、後記。
+
+你是資深工廠視覺 AI 分析師，同時具備以下四項專業能力：
 ① 工業設備診斷工程師（ISO 13374 狀態監測）
 ② 工業安全衛生工程師（ISO 45001 / OSHA）
 ③ 工廠事件分析師與緊急應變專家
@@ -1092,6 +1102,7 @@ export default function CameraStream({
 
   /* ── 攝影機狀態 ───────────────────────────────────────────────────── */
   const videoRef         = useRef<HTMLVideoElement>(null);
+  const serverImgRef     = useRef<HTMLImageElement>(null);    // 深遠鏡頭 MJPEG img
   const canvasRef        = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);   // VLM 分析框（z-20）
   const yoloCanvasRef    = useRef<HTMLCanvasElement>(null);   // YOLO 即時框（z-10）
@@ -1109,6 +1120,8 @@ export default function CameraStream({
   const [facingMode,        setFacingMode]        = useState<FacingMode>("environment");
   const [hasMultipleCams,   setHasMultipleCams]   = useState(false);
   const [videoSize,         setVideoSize]         = useState({ w: 0, h: 0 });
+  // 攝影機來源：local = 瀏覽器 WebRTC  |  server = 伺服器 MJPEG（深遠鏡頭）
+  const [cameraSource,      setCameraSource]      = useState<"local" | "server">("server");
 
   /* ── 分析狀態 ─────────────────────────────────────────────────────── */
   const [isAnalyzing,       setIsAnalyzing]       = useState(false);
@@ -1486,19 +1499,32 @@ export default function CameraStream({
   ───────────────────────────────────────────────────────────────────── */
 
   const captureFrame = useCallback((): string | null => {
-    const video  = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return null;
-    const w = video.videoWidth;
-    const h = video.videoHeight;
-    if (!w || !h) return null;
-    canvas.width  = w;
-    canvas.height = h;
+    if (!canvas) return null;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(video, 0, 0, w, h);
+
+    if (cameraSource === "server") {
+      // 深遠鏡頭：從 MJPEG <img> 抓幀
+      const img = serverImgRef.current;
+      if (!img || !img.complete || !img.naturalWidth) return null;
+      canvas.width  = img.naturalWidth  || 640;
+      canvas.height = img.naturalHeight || 480;
+      try { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); }
+      catch { return null; }
+    } else {
+      // 本機鏡頭：從 <video> 抓幀
+      const video = videoRef.current;
+      if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return null;
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (!w || !h) return null;
+      canvas.width  = w;
+      canvas.height = h;
+      ctx.drawImage(video, 0, 0, w, h);
+    }
     return canvas.toDataURL("image/jpeg", FRAME_JPEG_QUALITY).split(",")[1];
-  }, []);
+  }, [cameraSource]);
 
   /* ─────────────────────────────────────────────────────────────────────
      偵測框 + 環境資訊共用處理邏輯
@@ -2113,14 +2139,25 @@ export default function CameraStream({
           </div>
         )}
 
-        {/* 影像串流 */}
+        {/* 影像串流 — 本機鏡頭（WebRTC）*/}
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <video
           ref={videoRef}
           playsInline
           muted
           className={`h-full w-full object-cover transition-opacity duration-300 ${
-            isCameraOn ? "opacity-100" : "opacity-0 absolute inset-0"
+            isCameraOn && cameraSource === "local" ? "opacity-100" : "opacity-0 absolute inset-0"
+          }`}
+          style={{ minHeight: "clamp(280px, 56vw, 720px)" }}
+        />
+        {/* 影像串流 — 深遠鏡頭（伺服器 MJPEG）*/}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          ref={serverImgRef}
+          alt="深遠鏡頭串流"
+          crossOrigin="anonymous"
+          className={`h-full w-full object-cover transition-opacity duration-300 ${
+            isCameraOn && cameraSource === "server" ? "opacity-100" : "opacity-0 absolute inset-0"
           }`}
           style={{ minHeight: "clamp(280px, 56vw, 720px)" }}
         />
@@ -2280,7 +2317,7 @@ export default function CameraStream({
             {permission === "unsupported" && <UnsupportedBrowser />}
             {permission === "denied"      && <PermissionDenied />}
             {(permission === "prompt" || permission === "granted") && (
-              <PermissionBlocker onRequest={() => startCamera(undefined, facingMode)} />
+              <PermissionBlocker onRequest={() => cameraSource === "server" ? startServerCamera() : startCamera(undefined, facingMode)} />
             )}
           </div>
         )}
@@ -2300,9 +2337,39 @@ export default function CameraStream({
         {/* 底部控制列 */}
         {isCameraOn && (
           <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between gap-2 bg-gradient-to-t from-slate-950/95 via-slate-950/60 to-transparent p-3 sm:p-4">
-            {/* 左側：鏡頭選擇 */}
+            {/* 左側：鏡頭來源切換 + 本機鏡頭選擇 */}
             <div className="flex items-center gap-2">
-              {cameras.length > 1 && (
+              {/* 來源切換：本機鏡頭 / 深遠鏡頭 */}
+              <div className="flex items-center rounded-xl border border-white/10 bg-slate-900/80 p-0.5 text-xs">
+                <button
+                  onClick={() => { setCameraSource("local"); startCamera(undefined, facingMode); }}
+                  disabled={isAnalyzing}
+                  title="本機鏡頭（瀏覽器 WebRTC）"
+                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-40 ${
+                    cameraSource === "local"
+                      ? "bg-brand-500/30 text-brand-300"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Camera className="h-3 w-3" />
+                  <span className="hidden sm:inline">本機</span>
+                </button>
+                <button
+                  onClick={() => { setCameraSource("server"); startServerCamera(); }}
+                  disabled={isAnalyzing}
+                  title="深遠鏡頭（伺服器 RealSense / USB）"
+                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-40 ${
+                    cameraSource === "server"
+                      ? "bg-accent-500/30 text-accent-300"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Video className="h-3 w-3" />
+                  <span className="hidden sm:inline">深遠</span>
+                </button>
+              </div>
+              {/* 本機鏡頭選擇（只在 local 模式顯示）*/}
+              {cameraSource === "local" && cameras.length > 1 && (
                 <select
                   value={pendingDeviceId || activeDeviceId}
                   onChange={(e) => selectCamera(e.target.value)}
@@ -2316,7 +2383,7 @@ export default function CameraStream({
                   ))}
                 </select>
               )}
-              {hasMultipleCams && (
+              {cameraSource === "local" && hasMultipleCams && (
                 <button
                   onClick={switchCamera}
                   disabled={isAnalyzing || isCameraSwitching}

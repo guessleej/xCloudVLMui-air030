@@ -21,6 +21,7 @@
 name: xcloudvlmui-platform
 
 # ── 共用環境變數 ─────────────────────────────────────────────────────
+# DGX 使用容器內 llama-cpp CUDA（非 host Ollama）
 x-llm-env: &llm-env
   LLM_BASE_URL:    http://llama-cpp:8080
   LLM_MODEL:       ${MODEL_ALIAS:-gemma-4-e2b-it}
