@@ -21,14 +21,14 @@ class Settings(BaseSettings):
     chroma_collection:  str  = "maintenance_docs"
     embedding_top_k:    int  = 5
 
-    # ── llama.cpp (Gemma 4 E4B) ──────────────────────────
-    # Gemma 4 E4B 支援 128K context；Q4_K_M ~4GB VRAM
+    # ── llama.cpp (Gemma 4 E2B) ──────────────────────────
+    # Gemma 4 E2B 支援 128K context；Q4_K_S ~2.9GB VRAM
     llm_base_url:    str   = "http://localhost:8080"
-    llm_model:       str   = "gemma-4-e4b-it"    # llama.cpp /v1/models 回傳的 model id
+    llm_model:       str   = "gemma-4-e2b-it"    # llama.cpp /v1/models 回傳的 model id
     llm_ctx_size:    int   = 131072               # 128K = 131072 tokens
     llm_max_tokens:  int   = 4096                 # 單次生成上限
     llm_temperature: float = 0.1
-    embed_model:     str   = "gemma-4-e4b-it"
+    embed_model:     str   = "gemma-4-e2b-it"
 
     # ── live-vlm-webui ───────────────────────────────────
     vlm_webui_url:  str = "http://localhost:8090"
@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     mqtt_password:     str = ""
     mqtt_topic_filter: str = "xcloud/#"           # 訂閱所有 xcloud/ 下的主題
     mqtt_enabled:      bool = True
+
+    # ── D435i HLS 監控 ──────────────────────────────────────────────
+    hls_monitor_enabled:           bool = True
+    hls_monitor_url:               str  = "http://mediamtx:8888/d435i/index.m3u8"
+    hls_monitor_interval_sec:      int  = 30
+    hls_monitor_timeout_sec:       int  = 5
+    hls_monitor_failure_threshold: int  = 3
 
     class Config:
         env_file = ".env"

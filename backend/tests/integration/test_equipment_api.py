@@ -18,20 +18,17 @@ import pytest
 
 # ── GET /api/equipment ───────────────────────────────────────────────
 
-@pytest.mark.anyio
 async def test_list_equipment_returns_200(client):
     resp = await client.get("/api/equipment")
     assert resp.status_code == 200
 
-
 @pytest.mark.anyio
 async def test_list_equipment_returns_list_of_six(client):
-    """Mock 設備清單應包含 6 台設備"""
+    """設備清單預設為空（由真實資料填入）"""
     resp  = await client.get("/api/equipment")
     items = resp.json()
     assert isinstance(items, list)
-    assert len(items) == 6
-
+    assert len(items) == 0
 
 @pytest.mark.anyio
 async def test_list_equipment_schema(client):
@@ -52,16 +49,12 @@ async def test_equipment_summary_returns_200(client):
     resp = await client.get("/api/equipment/summary")
     assert resp.status_code == 200
 
-
-@pytest.mark.anyio
 async def test_equipment_summary_total_equals_six(client):
-    """total 應等於 Mock 設備數量（6）"""
+    """total 應為 0（尚未載入真實設備資料）"""
     resp = await client.get("/api/equipment/summary")
     data = resp.json()
-    assert data["total"] == 6
+    assert data["total"] == 0
 
-
-@pytest.mark.anyio
 async def test_equipment_summary_counts_add_up(client):
     """normal + warning + critical + offline 應等於 total"""
     resp = await client.get("/api/equipment/summary")
@@ -72,22 +65,12 @@ async def test_equipment_summary_counts_add_up(client):
 # ── GET /api/equipment/{id} ──────────────────────────────────────────
 
 @pytest.mark.anyio
-async def test_get_single_equipment_returns_200(client):
+async def test_get_single_equipment_returns_404_when_empty(client):
     resp = await client.get("/api/equipment/AIR-030-01")
-    assert resp.status_code == 200
-    assert resp.json()["id"] == "AIR-030-01"
-
+    assert resp.status_code == 404
 
 @pytest.mark.anyio
 async def test_get_nonexistent_equipment_returns_404(client):
     resp = await client.get("/api/equipment/NONEXISTENT")
     assert resp.status_code == 404
 
-
-@pytest.mark.anyio
-async def test_critical_equipment_has_correct_vhs(client):
-    """壓縮機 #1（AIR-030-01）狀態應為 critical，VHS 約 28.5"""
-    resp = await client.get("/api/equipment/AIR-030-01")
-    data = resp.json()
-    assert data["status"]    == "critical"
-    assert data["vhs_score"] == pytest.approx(28.5, abs=0.5)

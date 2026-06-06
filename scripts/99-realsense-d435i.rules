@@ -1,0 +1,6 @@
+# Intel RealSense D435i udev rules
+# Keep a stable alias across USB replug events. The streamer still verifies that
+# the node exposes Video Capture before using it, because RealSense creates
+# multiple /dev/video* entries.
+SUBSYSTEM=="video4linux", ATTRS{idVendor}=="8086", ENV{ID_MODEL}=="*RealSense*", ATTR{index}=="0", SYMLINK+="d435i-rgb", MODE="0666", GROUP="video"
+SUBSYSTEM=="video4linux", ATTRS{idVendor}=="8086", ENV{ID_SERIAL}=="*RealSense*", ATTR{index}=="0", SYMLINK+="d435i-rgb", MODE="0666", GROUP="video"
