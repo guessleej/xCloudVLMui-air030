@@ -63,3 +63,12 @@ backend/chat.py
 backend/knowledge.py
 backend/rag_service.py
 .github/workflows/
+
+# TLS 憑證與私鑰（一律在部署機自行產生，見 ssl/README.md）
+ssl/*.key
+ssl/*.crt
+ssl/*.pem
+*.key
+*.pem
+*.p12
+*.pfx
